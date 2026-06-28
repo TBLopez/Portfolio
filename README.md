@@ -10,18 +10,35 @@ The site pulls project entries from a Notion database and renders them as a brow
 
 ## Built With
 
-- **Astro** — static site, ships zero JavaScript by default
+- **Astro** — static-first, hydrates interactivity on demand
 - **Notion API** — content lives in a database, not markdown files
 - **GitHub Pages** — deployed from `gh-pages` branch on push
 - **Tailwind CSS** — loaded from CDN, configured inline for the terminal color scheme
 
+## Themes
+
+Five palettes, switchable from the command line:
+
+| Theme | Colors |
+|-------|--------|
+| Matrix | phosphor green on black |
+| Amber | warm amber on dark charcoal |
+| Ice | cool cyan on deep navy |
+| Dracula | purple and pink on dark slate |
+| Mono | white and gray on black |
+
+Type `theme <name>` at the prompt. Visiting all five unlocks the Wardrobe Change achievement.
+
 ## Running Locally
+
+Requires Node 18+. Clone, install, start:
 
 ```bash
 git clone https://github.com/TBLopez/Gatsby-Pages.git
 cd Gatsby-Pages
 npm install
-npm run dev
+cp .env.example .env     # add your Notion keys
+npm run dev               # → http://localhost:4321
 ```
 
 Build for production:
