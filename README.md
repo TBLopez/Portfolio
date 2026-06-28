@@ -1,73 +1,52 @@
-# Firefly Terminal Portfolio
+# Tony Khawaja-Lopez
 
-Interactive terminal-themed portfolio for Tony Khawaja-Lopez. Built with [Astro](https://astro.build), Tailwind CSS, and JetBrains Mono.
+A personal portfolio presented as a command-line interface. Green text on black, live typing sounds, and a directory of projects pulled from Notion — because sometimes a terminal says more than a landing page.
 
-## Features
+**[tblopez.github.io/Gatsby-Pages](https://tblopez.github.io/Gatsby-Pages)**
 
-- **Terminal UI** — command-driven interface with tab completion, history, typewriter effects
-- **5 Theme Palettes** — matrix/amber/ice/dracula/mono, switchable via `theme <name>` command
-- **Matrix Rain** — toggleable CRT matrix effect (`matrix on` / `matrix off`)
-- **Notion CMS** — project data sourced from a Notion database at build time
-- **Achievement System** — unlockable badges for discovering easter eggs
-- **CRT Scanline Overlay** — theme-aware retro display effect
-- **SFX** — Web Audio API sound effects (muted by default, opt-in on first interaction)
-- **Accessibility** — skip link, ARIA labels, reduced-motion support, keyboard navigation
-- **Responsive** — mobile drawer sidebar, adaptive layout
+## What's Here
 
-## Commands
+The site pulls project entries from a Notion database and renders them as a browsable "directory." There's an interactive command prompt, keyboard-driven navigation, and a handful of hacker-movie flourishes that make it feel alive.
 
-| Command | Description |
-|---------|-------------|
-| `help` | Show available commands |
-| `whoami` | Display operator info |
-| `ls` | List project archives |
-| `cat <file>` | Open archive inline |
-| `neofetch` | System information |
-| `theme <name>` | Switch palette |
-| `matrix` | Toggle rain effect |
-| `tail` | Toggle log feed pane |
-| `reboot` | Replay boot sequence |
-| `achievements` | Show operator badges |
-| `contact` | Show contact channels |
-| `clear` | Clear terminal (Ctrl+L) |
+## Built With
 
-## Setup
+- **Astro** — static site, ships zero JavaScript by default
+- **Notion API** — content lives in a database, not markdown files
+- **GitHub Pages** — deployed from `gh-pages` branch on push
+- **Tailwind CSS** — loaded from CDN, configured inline for the terminal color scheme
+
+## Running Locally
 
 ```bash
-# Install dependencies
+git clone https://github.com/TBLopez/Gatsby-Pages.git
+cd Gatsby-Pages
 npm install
-
-# Optional: Notion CMS integration
-cp .env.example .env
-# Add NOTION_API_KEY and NOTION_DATA_SOURCE_ID (or NOTION_DATABASE_ID)
-
-# Dev server
 npm run dev
-
-# Build
-npm run build
-
-# Preview build
-npm run preview
-
-# Deploy to GitHub Pages
-npm run deploy
 ```
 
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `NOTION_API_KEY` | No | Notion integration token |
-| `NOTION_DATA_SOURCE_ID` | No | Notion data source ID (v5 SDK) |
-| `NOTION_DATABASE_ID` | No | Notion database ID (fallback) |
-
-Without Notion env vars, the site runs in local mode with only the built-in files.
-
-## Deploy
+Build for production:
 
 ```bash
+npm run build
 npm run deploy
 ```
 
-Deploys to GitHub Pages via `gh-pages` using the CNAME configured in `public/CNAME`.
+## Design
+
+Monospaced, uppercase, blinking cursors. The color palette is two colors: a phosphor green and black. Everything else is distraction. The layout borrows from old terminals, sysadmin dashboards, and the feeling of typing something important at 2am.
+
+Fonts: JetBrains Mono throughout. Icons from Material Symbols.
+
+## Notion Integration
+
+The site expects two environment variables:
+
+```
+NOTION_API_KEY=ntn_...NOTION_DATABASE_ID=...
+```
+
+Without them it falls back to static content. With them, it queries a Notion database and renders whatever it finds — project names, descriptions, links, file attachments. Change the database, the site updates on next build.
+
+## License
+
+The code is mine. The terminal aesthetic belongs to everyone who's ever typed `ls` in a dark room. © 2024 Tony Khawaja-Lopez.
