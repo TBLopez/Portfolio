@@ -1,16 +1,21 @@
-# Security Audit Findings
+# Security Notes
 
-**Date**: March 21, 2026
+Last reviewed: June 2026
 
-## 1. `package.json` Dependency Audit
-Ran `npm audit` on the project dependencies.
+## Dependencies
+Ran `npm audit` on current Astro 6 dependency tree. No critical or high-severity vulnerabilities in production dependencies. Dev dependencies (`gh-pages`) are pinned to specific versions.
 
-**Results:**
-- 79 vulnerabilities found (13 low, 31 moderate, 33 high, 2 critical)
-- These vulnerabilities primarily originate from nested dependencies within the Gatsby and Webpack ecosystems typical of static site generators.
-- *Recommendation*: While they do not directly expose the static site to runtime attacks once built, it is recommended to run `npm audit fix` periodically and consider updating the base Gatsby template when a newer version is released.
+## Build Pipeline
+- Site is fully static — no server, no database, no user input handling at runtime
+- Notion API key and database ID stored in `.env`, never committed
+- `.gitignore` covers `.env`, `node_modules`, `.cache`, and build artifacts
 
-## 2. React Code XSS Vector Audit
-- The portfolio was redesigned strictly using CSS/Theme overrides, meaning no new React logic or raw HTML injection vectors (`dangerouslySetInnerHTML`) were introduced in the process.
-- Boilerplate information was sanitized by replacing static strings in `gatsby-config.ts`.
-- **Finding**: No new Cross-Site Scripting (XSS) vulnerabilities were introduced during the implementation phase. Routine is clean.
+## Content Security
+- Content pulled from Notion at build time only — no runtime API calls
+- Markdown and text content rendered through Astro's built-in sanitization
+- No user-generated content accepted at runtime
+
+## GitHub Pages
+- Deployed from `gh-pages` branch via `gh-pages` npm package
+- `.nojekyll` file present in `public/` for clean Astro asset serving
+- Repository is public — credentials are never in source
