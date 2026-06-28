@@ -42,7 +42,8 @@ Fonts: JetBrains Mono throughout. Icons from Material Symbols.
 The site expects two environment variables:
 
 ```
-NOTION_API_KEY=ntn_...NOTION_DATABASE_ID=...
+NOTION_API_KEY=ntn_...
+NOTION_DATABASE_ID=...
 ```
 
 Without them it falls back to static content. With them, it queries a Notion database and renders whatever it finds — project names, descriptions, links, file attachments. Change the database, the site updates on next build.
