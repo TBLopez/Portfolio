@@ -53,6 +53,7 @@ third-party requests are made. Voices live in `src/scripts/audio.ts`:
 | `done` | bandpass noise sweep 2.6 k→620 Hz + blip | end of a typed output block |
 | `error` | square 220→78 Hz with a 7-step gate + noise crack | unknown command |
 | `boot` | 42→68 Hz sub + noise swell | boot sequence |
+| `whisper` | slow-swelling sine partials in C (65/131/196/392 Hz, 0.3–0.7 s attack, ~1.9 s decay) | the terminal answering a question for itself |
 | rain bed | filtered noise loop, 0.07 Hz LFO on the filter, randomly panned crackles every 140–520 ms | while the matrix effect is on |
 
 Signals run through a bus into a short synthesized convolution room (0.42 s, decay 3.2)
@@ -83,6 +84,17 @@ The context is created on first user gesture, the default state respects
   its own badge. The stutter animates `transform` only and never `filter` on `<body>`:
   a filtered ancestor becomes the containing block for every `position: fixed`
   overlay and would drag the header and boot screen along with it.
+- **The machine's own voice** — a small table of whole-line phrases (`SPOKEN` in
+  `commands/index.ts`) is matched against normalised input *before* the command
+  lookup, so a question is answered instead of rejected. They are not commands:
+  they stay out of `help`, the palette and the badge list — a badge hint would
+  give the game away — and they don't count toward Completionist. Delivery lives
+  in `speak()`: a beat of hesitation (1.3 s of silence, the only response in the
+  terminal that isn't instant), the `whisper` voice instead of a click, then the
+  typewriter at a fixed 82 ms per character with per-character ticks and the
+  completion blip suppressed, so the line lands quietly. Under
+  `prefers-reduced-motion` the pause and the typing are skipped; the answer still
+  arrives.
 - **Live recon** — `dig`/`whois`/`nmap` are async. Their nodes land on screen
   immediately with a `;; querying …` line and are filled in from the response, then
   dispatch `firefly:scroll` so the terminal follows output it did not type itself.

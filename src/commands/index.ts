@@ -65,6 +65,28 @@ export type CommandResult = {
 
 export type Command = (args: string[], ctx: CommandContext) => CommandResult | void;
 
+/**
+ * Questions the machine answers in its own voice.
+ *
+ * These are deliberately not commands: they never appear in `help`, the
+ * palette or the badge list, they don't count toward Completionist, and a
+ * misspelling just falls through to the normal unknown-command path. Matched
+ * against a normalised line, so punctuation and casing don't matter.
+ */
+const SPOKEN: Array<{ match: RegExp; reply: string }> = [
+  { match: /^(am i|are we)( really)? alone$/, reply: 'you are not alone.' },
+];
+
+/** Returns the reply to a spoken line, or null if it is just a command. */
+export function spokenReply(raw: string): string | null {
+  const line = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return SPOKEN.find((phrase) => phrase.match.test(line))?.reply ?? null;
+}
+
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},

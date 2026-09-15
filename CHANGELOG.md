@@ -3,6 +3,8 @@
 ## 2026
 
 ### September
+- The terminal answers one question in its own voice now. It takes a moment to
+  reply, and the pause is deliberate. Nothing in `help` mentions it
 - New `dig` — real DNS over HTTPS (Cloudflare, falling back to Google), with
   `A/AAAA/MX/TXT/NS/CNAME/SOA/CAA/ANY` and a dig-style answer block
 - New `whois` — real RDAP records for domains and IP allocations: registrar,

@@ -10,6 +10,7 @@
  *   done   data-stream shimmer when a block of output finishes
  *   error  gated digital glitch for a bad command
  *   boot   sub thump + noise swell when the machine starts
+ *   whisper  slow warm swell — the machine answering a question
  *
  * Plus a continuous "digital rain" bed that runs while the matrix effect is
  * on, built from a filtered noise loop with random crackle ticks panned
@@ -19,7 +20,15 @@
  * short synthesized room so the clacks have somewhere to live.
  */
 
-export type SfxVoice = 'key' | 'type' | 'enter' | 'done' | 'error' | 'boot' | 'surge';
+export type SfxVoice =
+  | 'key'
+  | 'type'
+  | 'enter'
+  | 'done'
+  | 'error'
+  | 'boot'
+  | 'surge'
+  | 'whisper';
 
 export type SfxState = {
   muted: boolean;
@@ -226,6 +235,9 @@ class AudioEngine {
       case 'surge':
         this.surge(t);
         break;
+      case 'whisper':
+        this.whisper(t);
+        break;
     }
   }
 
@@ -289,6 +301,35 @@ class AudioEngine {
       gain: 0.05,
     });
     this.tone({ t, freq: 740, to: 520, dur: 0.09, gain: 0.02 });
+  }
+
+  /**
+   * The one voice in here that doesn't click. A slow swell of partials in C
+   * (C2/C3/G3/G4) that reads as something answering rather than something
+   * printing — used when the terminal speaks for itself.
+   */
+  private whisper(t: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const partials = [
+      { freq: 65.41, gain: 0.05, dur: 1.5, attack: 0.3 },
+      { freq: 130.81, gain: 0.05, dur: 1.9, attack: 0.4 },
+      { freq: 196.0, gain: 0.03, dur: 1.7, attack: 0.55 },
+      { freq: 392.0, gain: 0.011, dur: 1.15, attack: 0.7 },
+    ];
+    for (const p of partials) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(p.freq, t);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0.0001, t);
+      env.gain.linearRampToValueAtTime(p.gain, t + p.attack);
+      env.gain.exponentialRampToValueAtTime(0.0001, t + p.dur);
+      osc.connect(env);
+      env.connect(this.bus!);
+      osc.start(t);
+      osc.stop(t + p.dur + 0.05);
+    }
   }
 
   /** Gated square glitch. */

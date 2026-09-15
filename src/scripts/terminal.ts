@@ -4,6 +4,7 @@ import {
   commandNames,
   el,
   paletteEntries,
+  spokenReply,
   type CommandContext,
 } from '../commands/index';
 import { localFiles, type SystemFile } from '../data/systemFiles';
@@ -382,11 +383,37 @@ export function initTerminal(init: TerminalInit): void {
     }
   });
 
+  // ── The machine's own voice ──────────────────────────────────────────
+  // Every other response here is instant. This one hesitates first, prints in
+  // silence at its own pace, and leaves the answer hanging without the usual
+  // completion blip — the pause is the whole effect.
+  async function speak(text: string): Promise<void> {
+    const reduced = prefersReducedMotion();
+    if (!reduced) await new Promise((resolve) => window.setTimeout(resolve, 1300));
+
+    const node = el(
+      'div',
+      {
+        class:
+          'ml-4 mt-3 pl-3 border-l-2 border-primary-container/40 text-primary-container tracking-wide',
+      },
+      text,
+    );
+    historyContainer.appendChild(node);
+    audio.play('whisper');
+
+    if (!reduced) await typewrite(node, { pace: 82, quiet: true });
+    terminalOutput.scrollTo({ top: terminalOutput.scrollHeight + 1000, behavior: 'smooth' });
+  }
+
   // ── Typewriter ───────────────────────────────────────────────────────
   // Duration is capped so a 60-line `help` dump doesn't take four seconds,
   // and the live region is marked busy while glyphs are being appended so
   // screen readers don't announce every character.
-  function typewrite(el: HTMLElement, speed = 6): Promise<void> {
+  function typewrite(
+    el: HTMLElement,
+    { speed = 6, pace, quiet = false }: { speed?: number; pace?: number; quiet?: boolean } = {},
+  ): Promise<void> {
     if (prefersReducedMotion()) return Promise.resolve();
 
     return new Promise<void>((resolve) => {
@@ -403,7 +430,10 @@ export function initTerminal(init: TerminalInit): void {
       const originals = nodes.map((node) => node.nodeValue ?? '');
       const totalChars = originals.reduce((sum, t) => sum + t.length, 0);
       // Fast enough to stay snappy, slow enough to still read as a terminal.
-      const delay = Math.max(2, Math.min(speed, Math.round(1200 / Math.max(1, totalChars))));
+      // `pace` is a fixed per-character delay that ignores the budget — used
+      // for the rare response the machine types in its own time.
+      const delay =
+        pace ?? Math.max(2, Math.min(speed, Math.round(1200 / Math.max(1, totalChars))));
       nodes.forEach((node) => (node.nodeValue = ''));
 
       let nodeIdx = 0;
@@ -418,7 +448,7 @@ export function initTerminal(init: TerminalInit): void {
         if (timeoutId) window.clearTimeout(timeoutId);
         activeTypewriter = null;
         historyContainer.removeAttribute('aria-busy');
-        audio.play('done');
+        if (!quiet) audio.play('done');
         resolve();
       };
 
@@ -432,7 +462,7 @@ export function initTerminal(init: TerminalInit): void {
         if (charIdx < text.length) {
           nodes[nodeIdx].nodeValue = (nodes[nodeIdx].nodeValue ?? '') + text.charAt(charIdx);
           charIdx++;
-          if (charIdx % 3 === 0) audio.play('type');
+          if (!quiet && charIdx % 3 === 0) audio.play('type');
           terminalOutput.scrollTop = terminalOutput.scrollHeight + 1000;
           timeoutId = window.setTimeout(tick, delay);
         } else {
@@ -510,6 +540,13 @@ export function initTerminal(init: TerminalInit): void {
     appendPrompt(cmd);
     audio.play('enter');
 
+    const reply = spokenReply(cmd);
+    if (reply) {
+      await speak(reply);
+      if (!palette.isOpen() && !(opts.fromClick && !hasFinePointer)) input.focus();
+      return;
+    }
+
     const handler = commands[baseCmd];
     let result: ReturnType<typeof commands[string]> | null = null;
     if (handler) {
@@ -527,7 +564,7 @@ export function initTerminal(init: TerminalInit): void {
 
     if (result.typewrite) {
       // `fast` caps the per-character delay for scripted runs (tour, replay).
-      await typewrite(result.node, opts.fast ? 2 : 6);
+      await typewrite(result.node, { speed: opts.fast ? 2 : 6 });
     }
     // Tapping a chip on a phone shouldn't force the soft keyboard back open,
     // and the palette owns focus while it is open.
@@ -784,7 +821,9 @@ export function initTerminal(init: TerminalInit): void {
       .filter((c) => c.length > 0)
       .slice(0, 20)
       // Only known commands, so a shared link can't poke at internals.
-      .filter((c) => commands[c.split(/\s+/)[0].toLowerCase()] !== undefined);
+      .filter(
+        (c) => commands[c.split(/\s+/)[0].toLowerCase()] !== undefined || spokenReply(c) !== null,
+      );
     if (requested.length === 0) return;
 
     const reduced = prefersReducedMotion();
