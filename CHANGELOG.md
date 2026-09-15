@@ -3,6 +3,21 @@
 ## 2026
 
 ### September
+- New `dig` — real DNS over HTTPS (Cloudflare, falling back to Google), with
+  `A/AAAA/MX/TXT/NS/CNAME/SOA/CAA/ANY` and a dig-style answer block
+- New `whois` — real RDAP records for domains and IP allocations: registrar,
+  creation/expiry dates, status flags, nameservers, DNSSEC
+- `nmap` now resolves its target with a real DoH lookup and reveals the port
+  table line by line with keystroke ticks; results are deterministic per address
+  and the table is labelled as simulated
+- New `tour` — guided walkthrough of the machine, `Ctrl+C` aborts between steps
+- New `share` — copies a `/?replay=` link that retypes your session on load, at
+  double speed, restricted to known commands
+- New rare **déjà vu** glitch: frame stutter, `DÉJÀ VU` flash, a surge of the
+  rain, and an ASCII cat walking past the prompt. Hidden `dejavu` command to
+  force it. Own badge; disabled under `prefers-reduced-motion`
+- Project entries are now pulled from the public GitHub API at build time (own,
+  non-archived repos) and merged with the Notion entries
 - Rebuilt the sound: a mechanical switch under each keystroke, a falling-code tick as
   the typewriter prints, a carriage-return thunk and bell on Enter, a data shimmer on
   completion, a gated glitch on bad commands, a sub thump on boot, and a "digital rain"

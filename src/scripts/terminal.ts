@@ -2,6 +2,7 @@ import { audio, type SfxState, type SfxVoice } from './audio';
 import {
   commands,
   commandNames,
+  el,
   paletteEntries,
   type CommandContext,
 } from '../commands/index';
@@ -19,15 +20,19 @@ import { trackCommand, trackTheme, unlock } from './achievements';
 import { runBoot, shouldShowBoot } from './boot';
 import { createPalette, type PaletteEntry } from './palette';
 
-export type NotionProject = {
+export type ProjectEntry = {
   id: string;
   title: string;
   description: string;
   url: string;
+  /** File extension used in the directory listing. Defaults to .md */
+  ext?: string;
+  /** Card badge. Defaults to NOTION. */
+  tag?: string;
 };
 
 export type TerminalInit = {
-  notionProjects: NotionProject[];
+  notionProjects: ProjectEntry[];
   notionConnected: boolean;
   /** Injected at build time, surfaced by `status`. */
   builtAt?: string;
@@ -51,16 +56,24 @@ function isEmbeddable(url: string): boolean {
   }
 }
 
-function buildFiles(projects: NotionProject[]): Record<string, SystemFile> {
+const normalizeUrl = (url?: string): string => (url ?? '').replace(/\/+$/, '').toLowerCase();
+
+function buildFiles(projects: ProjectEntry[]): Record<string, SystemFile> {
   const files: Record<string, SystemFile> = { ...localFiles };
+  // A project that is already hand-listed (the source repo is also a public
+  // repo) would otherwise appear as two cards pointing at the same place.
+  // The curated entry wins.
+  const seen = new Set(Object.values(localFiles).map((f) => normalizeUrl(f.url)));
   for (const p of projects) {
-    const name = p.title.toLowerCase().replace(/\s+/g, '_') + '.md';
+    if (!p.url || p.url === '#' || seen.has(normalizeUrl(p.url))) continue;
+    seen.add(normalizeUrl(p.url));
+    const name = p.title.toLowerCase().replace(/\s+/g, '_') + (p.ext ?? '.md');
     files[name] = {
       desc: p.description,
       url: p.url,
       available: !!p.url && p.url !== '#',
       embed: isEmbeddable(p.url),
-      tag: 'NOTION',
+      tag: p.tag ?? 'NOTION',
     };
   }
   return files;
@@ -178,6 +191,46 @@ export function initTerminal(init: TerminalInit): void {
     step();
   };
 
+  // ── Déjà vu ──────────────────────────────────────────────────────────
+  // Matrix lore: a déjà vu is a glitch — they changed something. Rare, and
+  // rate-limited so it stays an event rather than a screensaver.
+  const catEl = document.getElementById('dejavu-cat');
+  let lastDejavu = 0;
+  const dejavu = (force = false): boolean => {
+    const now = performance.now();
+    if (!force && now - lastDejavu < 90_000) return false;
+    if (prefersReducedMotion()) return false;
+    lastDejavu = now;
+
+    document.body.classList.add('dejavu');
+    window.setTimeout(() => document.body.classList.remove('dejavu'), 1200);
+
+    if (catEl) {
+      catEl.classList.remove('walking');
+      void catEl.offsetWidth;
+      catEl.classList.add('walking');
+      window.setTimeout(() => catEl.classList.remove('walking'), 5600);
+    }
+
+    audio.play('surge');
+    unlock('dejavu');
+    note('> deja vu detected in sector 7 — they changed something.', 'opacity-70 text-[11px]');
+    glitch(['DÉJÀ VU']);
+    return true;
+  };
+
+  const maybeDejavu = () => {
+    if (Math.random() < 0.045) dejavu();
+  };
+
+  /** Dim narration line used by `tour` and glitches. */
+  function note(text: string, className = 'opacity-70 text-[11px]'): HTMLElement {
+    const node = el('div', { class: `ml-4 mt-2 ${className}` }, text);
+    historyContainer.appendChild(node);
+    terminalOutput.scrollTo({ top: terminalOutput.scrollHeight + 1000, behavior: 'smooth' });
+    return node;
+  }
+
   const ctx: CommandContext = {
     files,
     notionConnected: init.notionConnected,
@@ -216,6 +269,8 @@ export function initTerminal(init: TerminalInit): void {
     },
     openPalette: () => palette.open(),
     glitch,
+    startTour: () => void runTour(),
+    dejavu: () => void dejavu(true),
     build: {
       sha: init.buildSha || 'dev',
       builtAt: init.builtAt || new Date().toISOString(),
@@ -418,7 +473,10 @@ export function initTerminal(init: TerminalInit): void {
     return node;
   }
 
-  async function runCommand(raw: string, opts: { fromClick?: boolean } = {}): Promise<void> {
+  async function runCommand(
+    raw: string,
+    opts: { fromClick?: boolean; fast?: boolean } = {},
+  ): Promise<void> {
     const cmd = raw.trim();
 
     // A new command always wins over an in-flight typewriter, otherwise two
@@ -468,11 +526,15 @@ export function initTerminal(init: TerminalInit): void {
     terminalOutput.scrollTo({ top: terminalOutput.scrollHeight + 1000, behavior: 'smooth' });
 
     if (result.typewrite) {
-      await typewrite(result.node);
+      // `fast` caps the per-character delay for scripted runs (tour, replay).
+      await typewrite(result.node, opts.fast ? 2 : 6);
     }
     // Tapping a chip on a phone shouldn't force the soft keyboard back open,
     // and the palette owns focus while it is open.
     if (!palette.isOpen() && !(opts.fromClick && !hasFinePointer)) input.focus();
+
+    // Rare glitch: they changed something.
+    maybeDejavu();
   }
 
   // ── Command palette ──────────────────────────────────────────────────
@@ -648,8 +710,128 @@ export function initTerminal(init: TerminalInit): void {
     void runCommand(val);
   });
 
+  // ── Guided tour ──────────────────────────────────────────────────────
+  // A scripted walkthrough for people who will not type `help`. Awaiting each
+  // runCommand keeps the typewriter pacing instead of dumping everything at
+  // once, and Ctrl+C aborts mid-step.
+  let tourAborted = false;
+  let tourRunning = false;
+  async function runTour(): Promise<void> {
+    if (tourRunning) return;
+    tourRunning = true;
+    tourAborted = false;
+    const reduced = prefersReducedMotion();
+    const pause = (ms: number) => new Promise((r) => window.setTimeout(r, reduced ? 40 : ms));
+    const disposers: Array<() => void> = [
+      registerInterrupt(() => {
+        tourAborted = true;
+      }),
+    ];
+    const stop = () => {
+      disposers.forEach((d) => d());
+      tourRunning = false;
+    };
+
+    const openArchive = Object.entries(files).find(([, f]) => f.available)?.[0];
+    const steps: Array<{ note: string; command?: string }> = [
+      { note: 'STEP 1/8 — who runs this machine', command: 'whoami' },
+      { note: 'STEP 2/8 — the hardware', command: 'neofetch' },
+      { note: 'STEP 3/8 — what is mounted', command: 'ls' },
+      ...(openArchive
+        ? [{ note: 'STEP 4/8 — the viewer module', command: `cat ${openArchive}` }]
+        : []),
+      { note: 'STEP 5/8 — live DNS, straight from your browser', command: 'dig tonykl.com' },
+      { note: 'STEP 6/8 — telemetry from the machine', command: 'tail' },
+      { note: 'STEP 7/8 — repaint the room', command: 'theme ice' },
+      { note: 'STEP 8/8 — and the rain', command: 'matrix on' },
+      { note: 'that is the tour. contact details, then your prompt:', command: 'contact' },
+    ];
+
+    await pause(200);
+    for (const step of steps) {
+      if (tourAborted) break;
+      note(`tour: ${step.note}`, 'opacity-60 text-[11px]');
+      await pause(180);
+      if (step.command && !tourAborted) {
+        await runCommand(step.command, { fast: true });
+      }
+      await pause(260);
+    }
+
+    if (tourAborted) {
+      note('tour: aborted. Restore the prompt with `clear` whenever you like.', 'text-error text-[11px]');
+    } else {
+      await pause(200);
+      runCommand('theme matrix', { fast: true });
+      note('tour: complete — Ctrl+K opens the command palette, `help` lists everything, and five commands are unlisted.', 'opacity-70 text-[11px]');
+    }
+    stop();
+  }
+
+  /** `?replay=a,b,c` — a shareable session that types itself out. */
+  async function replayFromUrl(): Promise<void> {
+    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.replace(/^#/, '');
+    const raw =
+      params.get('replay') ??
+      (hash.startsWith('replay=') ? decodeURIComponent(hash.slice('replay='.length)) : '');
+    if (!raw) return;
+
+    const cleaned = stripReplayParam();
+    const requested = raw
+      .split(/[,\n]/)
+      .map((c) => c.trim().slice(0, 120))
+      .filter((c) => c.length > 0)
+      .slice(0, 20)
+      // Only known commands, so a shared link can't poke at internals.
+      .filter((c) => commands[c.split(/\s+/)[0].toLowerCase()] !== undefined);
+    if (requested.length === 0) return;
+
+    const reduced = prefersReducedMotion();
+    const pause = (ms: number) => new Promise((r) => window.setTimeout(r, reduced ? 30 : ms));
+    note(
+      `> replaying shared session — ${requested.length} command${requested.length === 1 ? '' : 's'}${cleaned ? ' (link cleaned up)' : ''}.`,
+      'opacity-70 text-[11px]',
+    );
+    await pause(500);
+    for (const cmd of requested) {
+      await runCommand(cmd, { fast: true });
+      await pause(240);
+    }
+    note('> replay complete. Your own prompt is ready.', 'opacity-60 text-[11px]');
+  }
+
+  /** Drop ?replay= after reading it so a refresh doesn't re-run the session. */
+  function stripReplayParam(): boolean {
+    const url = new URL(window.location.href);
+    let changed = false;
+    if (url.searchParams.has('replay')) {
+      url.searchParams.delete('replay');
+      changed = true;
+    }
+    const hash = url.hash.replace(/^#/, '');
+    if (hash.startsWith('replay=')) {
+      url.hash = '';
+      changed = true;
+    }
+    if (changed) window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    return changed;
+  }
+
   // Keep the palette's archive list honest if anything re-renders files.
   palette.refresh();
+
+  // Async command output (dig/whois/nmap) asks for a scroll when it lands.
+  window.addEventListener('firefly:scroll', () => {
+    terminalOutput.scrollTo({ top: terminalOutput.scrollHeight + 1000, behavior: 'smooth' });
+  });
+
+  // Shared session? Type it out once the prompt is ready.
+  if (sessionStorage.getItem('boot.shown')) {
+    void replayFromUrl();
+  } else {
+    window.setTimeout(() => void replayFromUrl(), 2200);
+  }
 
   // ── Session banner timestamps ────────────────────────────────────────
   // The page is static, so the build-time stamp used to claim every visitor

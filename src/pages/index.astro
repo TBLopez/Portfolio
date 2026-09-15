@@ -6,7 +6,7 @@ import TerminalFooter from '../components/TerminalFooter.astro';
 import WelcomeBanner from '../components/WelcomeBanner.astro';
 import { execSync } from 'node:child_process';
 import { Client } from '@notionhq/client';
-import type { NotionProject } from '../scripts/terminal';
+import type { ProjectEntry } from '../scripts/terminal';
 
 // Notion SDK v5 renamed `databases.query` to `dataSources.query`.
 // Accept either env var name so existing deployments keep working.
@@ -14,7 +14,7 @@ const notionDataSourceId =
   import.meta.env.NOTION_DATA_SOURCE_ID || import.meta.env.NOTION_DATABASE_ID;
 const notionConnected = !!(import.meta.env.NOTION_API_KEY && notionDataSourceId);
 
-let notionProjects: NotionProject[] = [];
+let notionProjects: ProjectEntry[] = [];
 
 if (notionConnected) {
   try {
@@ -54,6 +54,61 @@ if (notionConnected) {
   } catch (error) {
     console.error('Notion Connection Error:', error);
   }
+}
+
+// Public GitHub repos, pulled at build time so the directory stays current
+// without a CMS. Unauthenticated: 60 req/hour per IP is plenty for a build,
+// and private repos simply never appear.
+const GITHUB_USER = 'TBLopez';
+// Anonymous requests are capped at 60/hour per IP, which a few rebuilds can
+// burn through. Set GITHUB_TOKEN to lift that to 5,000/hour; the token is only
+// ever used as a request header and never reaches the page.
+const githubToken = import.meta.env.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+let repoProjects: ProjectEntry[] = [];
+try {
+  const response = await fetch(
+    `https://api.github.com/users/${GITHUB_USER}/repos?per_page=100&sort=pushed&direction=desc`,
+    {
+      headers: {
+        accept: 'application/vnd.github+json',
+        'user-agent': 'tonykl-portfolio-build',
+        ...(githubToken ? { authorization: `Bearer ${githubToken}` } : {}),
+      },
+      signal: AbortSignal.timeout(7000),
+    },
+  );
+  if (!response.ok) {
+    // Never fail the build over this, but do say so out loud: quietly shipping
+    // an empty directory is worse than a loud warning.
+    console.warn(
+      `GitHub repo lookup returned ${response.status} — directory will list local archives only.`,
+    );
+  }
+  if (response.ok) {
+    const repos = (await response.json()) as any[];
+    repoProjects = repos
+      .filter((repo) => repo && !repo.fork && !repo.archived && repo.name)
+      .map((repo) => {
+        // Prefer a live homepage, unless it is this site (avoids framing
+        // ourselves) — then link to the source.
+        const homepage: string | null = repo.homepage || null;
+        const url =
+          homepage && !/tonykl\.com/i.test(homepage) ? homepage : repo.html_url;
+        const pushed = String(repo.pushed_at ?? '').slice(0, 10);
+        return {
+          id: String(repo.id),
+          title: repo.name,
+          description: repo.description
+            ? `${repo.description} — pushed ${pushed}`
+            : `Public repository, last pushed ${pushed}`,
+          url,
+          ext: '.url',
+          tag: (repo.language as string) || 'CODE',
+        };
+      });
+  }
+} catch (error) {
+  console.warn('GitHub repo lookup failed, continuing without:', error);
 }
 
 // Build-time fallback stamp. The client replaces it with the visitor's actual
@@ -127,5 +182,10 @@ try {
   id="terminal-data"
   type="application/json"
   is:inline
-  set:html={JSON.stringify({ notionProjects, notionConnected, builtAt, buildSha })}
+  set:html={JSON.stringify({
+    notionProjects: [...repoProjects, ...notionProjects],
+    notionConnected,
+    builtAt,
+    buildSha,
+  })}
 />

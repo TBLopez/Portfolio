@@ -69,3 +69,20 @@ The context is created on first user gesture, the default state respects
 - **Typing feeds the rain** — keystrokes call `surge()`: the render loop speeds up (55 ms → 32 ms per frame), columns re-seed from the top, canvas opacity lifts to 0.85 for ~280 ms, and the rain bed occasionally whooshes.
 - **Click-to-run** — anything carrying `data-command` behaves like a menu item (header, sidebar, welcome chips, `ls` cards).
 - `neo`, `redpill`, `bluepill` — full-screen glitch flash, palette swap and badge unlock.
+- **`tour`** — a scripted walkthrough (`runTour()` in `terminal.ts`) that awaits each
+  `runCommand`, so the typewriter pacing carries instead of dumping output. Eight
+  numbered steps plus a sign-off, `Ctrl+C` aborts between steps and restores the
+  prompt.
+- **Session replay** — `share` copies `/?replay=<commands>`; on load the terminal strips
+  the parameter with `history.replaceState`, keeps only known commands, caps the list
+  at 20 (120 chars each) and types them out at double speed. A shared link cannot
+  reach anything the visitor couldn't type themselves.
+- **Déjà vu** — a 4.5% chance after any command, rate-limited to one per 90 seconds
+  (`prefers-reduced-motion` disables it entirely). A frame stutter, the `DÉJÀ VU`
+  overlay, a surge of the rain, and an ASCII cat walking the bottom third. It carries
+  its own badge. The stutter animates `transform` only and never `filter` on `<body>`:
+  a filtered ancestor becomes the containing block for every `position: fixed`
+  overlay and would drag the header and boot screen along with it.
+- **Live recon** — `dig`/`whois`/`nmap` are async. Their nodes land on screen
+  immediately with a `;; querying …` line and are filled in from the response, then
+  dispatch `firefly:scroll` so the terminal follows output it did not type itself.

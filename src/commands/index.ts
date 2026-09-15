@@ -2,6 +2,17 @@ import type { SystemFile } from '../data/systemFiles';
 import type { ThemeName } from '../scripts/themes';
 import type { SfxState, SfxVoice } from '../scripts/audio';
 import {
+  DNS_TYPE_LIST,
+  dnsStatusName,
+  dnsTypeName,
+  dohQuery,
+  isIpLiteral,
+  portState,
+  rdapLookup,
+  resolveA,
+  type DohResult,
+} from '../scripts/net';
+import {
   ACHIEVEMENTS,
   getAll,
   getUnlocked,
@@ -39,6 +50,10 @@ export type CommandContext = {
   openPalette: () => void;
   /** Full-screen Matrix flash. */
   glitch: (messages: string[]) => void;
+  /** Scripted walkthrough (Ctrl+C aborts). */
+  startTour: () => void;
+  /** Glitch the screen and send a cat past the prompt. */
+  dejavu: () => void;
   /** Injected at build time. */
   build: { sha: string; builtAt: string };
 };
@@ -50,7 +65,7 @@ export type CommandResult = {
 
 export type Command = (args: string[], ctx: CommandContext) => CommandResult | void;
 
-function el<K extends keyof HTMLElementTagNameMap>(
+export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
   ...children: (Node | string)[]
@@ -74,6 +89,28 @@ function errorLine(msg: string): HTMLElement {
   return output('text-error', msg);
 }
 
+/** Async output lands after the node is already on screen — nudge the scroll. */
+function scrollToEnd(): void {
+  window.dispatchEvent(new Event('firefly:scroll'));
+}
+
+function dim(text: string, className = 'opacity-70'): HTMLElement {
+  return el('div', { class: className }, text);
+}
+
+/** `name  TTL  IN  TYPE  data`, the way dig aligns it. */
+function rrLine(rr: { name: string; TTL: number; type: number; data: string }): HTMLElement {
+  const name = rr.name.padEnd(30, ' ');
+  const ttl = String(rr.TTL).padStart(6, ' ');
+  const type = dnsTypeName(rr.type).padEnd(7, ' ');
+  return el(
+    'div',
+    { class: 'whitespace-pre-wrap break-words' },
+    `${name}${ttl}  IN  ${type}`,
+    el('span', { class: 'text-white' }, rr.data),
+  );
+}
+
 const helpRows: Array<[string, string]> = [
   ['whoami', 'Display current operator info'],
   ['pwd', 'Print working directory'],
@@ -82,7 +119,11 @@ const helpRows: Array<[string, string]> = [
   ['ls', 'List available archives'],
   ['cat [file]', 'Open archive inline'],
   ['status', 'Build, runtime and progress report'],
-  ['nmap [host]', 'Scan a host (simulated)'],
+  ['dig [name]', 'Live DNS lookup (type: A/AAAA/MX/TXT/NS/ANY)'],
+  ['whois [domain]', 'Live RDAP registration record'],
+  ['nmap [host]', 'Resolve a host, then a simulated port scan'],
+  ['tour', 'Guided walkthrough of the terminal'],
+  ['share', 'Copy a link that replays your session'],
   ['top', 'Live process list'],
   ['neofetch', 'System information'],
   ['matrix', 'Toggle matrix rain effect'],
@@ -281,58 +322,322 @@ export const commands: Record<string, Command> = {
     ctx.clear();
   },
 
-  nmap(args) {
+  nmap(args, ctx) {
     const target = args[0] || '127.0.0.1';
-    const box = output('text-primary-container');
-    const dim = (text: string) =>
-      el('div', { class: 'opacity-70' }, text);
-    const portLine = (port: string, state: 'open' | 'filtered', svc: string) =>
-      el(
-        'div',
-        { class: 'text-white' },
-        `${port.padEnd(10, ' ')}`,
-        el(
-          'span',
-          {
-            class:
-              state === 'open' ? 'text-primary-container' : 'text-error',
-          },
-          state.padEnd(9, ' '),
-        ),
-        svc,
-      );
-    box.append(
-      dim(
-        `Starting Nmap 7.92 ( https://nmap.org ) at ${new Date().toISOString()}`,
-      ),
-      el('div', {}, `Nmap scan report for ${target}`),
-      el('div', {}, 'Host is up (0.00032s latency).'),
-      el('div', { class: 'mt-2 text-error' }, 'PORT      STATE    SERVICE'),
-      portLine('22/tcp', 'filtered', 'ssh'),
-      portLine('80/tcp', 'open', 'http'),
-      portLine('443/tcp', 'open', 'https'),
-      portLine('3306/tcp', 'filtered', 'mysql'),
-      el(
-        'div',
-        { class: 'mt-2 text-error font-bold' },
-        '[!] WARNING: UNSECURE PORT DETECTED. INITIATING PAYLOAD...',
-      ),
-      el(
-        'div',
-        { class: 'text-white text-[10px] mt-1' },
-        '[|||||||||||||||||||||||||||||||] 100% EXPLOIT SUCCESSFUL',
-      ),
-      el(
-        'div',
-        {
-          class:
-            'mt-2 text-primary-container font-bold tracking-widest uppercase',
-        },
-        'SYSTEM COMPROMISED. ROOT ACCESS GRANTED.',
-      ),
-    );
+    const wrapper = output('text-primary-container');
+    const head = el('div', { class: 'opacity-70' });
+    const stage = el('div', { class: 'mt-1' });
+    const table = el('div', { class: 'mt-2 hidden' });
+    const verdict = el('div', { class: 'mt-2 hidden' });
+    wrapper.append(head, stage, table, verdict);
+
+    const timers: number[] = [];
+    const controller = new AbortController();
+    ctx.registerInterrupt(() => {
+      timers.forEach((id) => window.clearTimeout(id));
+      controller.abort();
+      stage.textContent = 'nmap: scan aborted.';
+    });
+
+    const PORTS: Array<[number, string]> = [
+      [22, 'ssh'],
+      [25, 'smtp'],
+      [53, 'domain'],
+      [80, 'http'],
+      [111, 'rpcbind'],
+      [443, 'https'],
+      [445, 'microsoft-ds'],
+      [3306, 'mysql'],
+      [3389, 'ms-wbt-server'],
+      [5432, 'postgresql'],
+      [6379, 'redis'],
+      [8080, 'http-proxy'],
+      [8443, 'https-alt'],
+      [27017, 'mongodb'],
+    ];
+
+    void (async () => {
+      let ip = target;
+      head.textContent = `Starting firefly-nmap at ${new Date().toLocaleTimeString()}`;
+      stage.textContent = `Resolving ${target} …`;
+
+      if (!isIpLiteral(target)) {
+        const resolved = await resolveA(target, controller.signal);
+        if (!resolved) {
+          stage.textContent = `nmap: failed to resolve "${target}" — no A record (try dig ${target}).`;
+          scrollToEnd();
+          return;
+        }
+        ip = resolved;
+        stage.replaceChildren(
+          el('div', {}, `Nmap scan report for ${target} (${ip})`),
+          el('div', { class: 'opacity-70' }, 'DNS resolved live over DoH'),
+          el('div', { class: 'opacity-70 text-[10px]' }, '[!] port table below is simulated — no packets leave the browser'),
+        );
+      } else {
+        stage.replaceChildren(
+          el('div', {}, `Nmap scan report for ${ip}`),
+          el('div', { class: 'opacity-70 text-[10px]' }, '[!] port table below is simulated — no packets leave the browser'),
+        );
+      }
+
+      table.classList.remove('hidden');
+      table.append(el('div', { class: 'text-error' }, 'PORT       STATE      SERVICE'));
+      const rows: HTMLElement[] = [];
+      for (const [port, service] of PORTS) {
+        const state = portState(ip, port);
+        rows.push(
+          el(
+            'div',
+            { class: 'text-white' },
+            `${`${port}/tcp`.padEnd(11, ' ')}`,
+            el(
+              'span',
+              { class: state === 'open' ? 'text-primary-container' : state === 'filtered' ? 'text-error' : 'opacity-50' },
+              state.padEnd(11, ' '),
+            ),
+            service,
+          ),
+        );
+      }
+      rows.forEach((row, i) => {
+        const id = window.setTimeout(() => {
+          table.append(row);
+          ctx.sfx.play('type');
+          scrollToEnd();
+        }, 130 * i);
+        timers.push(id);
+      });
+
+      const done = window.setTimeout(() => {
+        const open = PORTS.filter(([port]) => portState(ip, port) === 'open');
+        const filtered = PORTS.filter(([port]) => portState(ip, port) === 'filtered');
+        verdict.classList.remove('hidden');
+        verdict.replaceChildren(
+          el(
+            'div',
+            { class: 'mt-2' },
+            `${PORTS.length} ports probed · ${open.length} open · ${filtered.length} filtered`,
+          ),
+          open.length > 0
+            ? el(
+                'div',
+                { class: 'mt-1 text-error font-bold' },
+                `[!] ${open.length} EXPOSED SERVICE${open.length === 1 ? '' : 'S'} — harden these first.`,
+              )
+            : el('div', { class: 'mt-1 text-primary-container' }, '[ok] no open ports in the probe set.'),
+          el(
+            'div',
+            { class: 'mt-2 opacity-70 text-[10px]' },
+            'For a real scan of a host you own: nmap -sV -p- <target>',
+          ),
+        );
+        scrollToEnd();
+      }, 130 * rows.length + 220);
+      timers.push(done);
+    })();
+
     unlock('recon');
-    return { node: box, typewrite: true };
+    return { node: wrapper, typewrite: false };
+  },
+
+  dig(args, ctx) {
+    const name = args[0];
+    const requested = (args[1] || 'A').toUpperCase();
+    if (!name) {
+      return {
+        node: errorLine(`dig: usage: dig <name> [type] — types: ${DNS_TYPE_LIST}, ANY`),
+        typewrite: false,
+      };
+    }
+    const wrapper = output('text-primary-container');
+    const header = el(
+      'div',
+      { class: 'opacity-70' },
+      `; <<>> firefly dig 1.0 <<>> ${name} ${requested}`,
+    );
+    const body = el('div', { class: 'mt-1 opacity-70' }, `;; querying ${requested} for ${name} over DoH …`);
+    wrapper.append(header, body);
+
+    const controller = new AbortController();
+    ctx.registerInterrupt(() => controller.abort());
+
+    void (async () => {
+      const types = requested === 'ANY' ? ['A', 'AAAA', 'MX', 'TXT', 'NS'] : [requested];
+      try {
+        const results: DohResult[] = [];
+        for (const type of types) {
+          results.push(await dohQuery(name, type, controller.signal));
+        }
+        const primary = results[0];
+        const answers = results.flatMap((r) => r.answers);
+        const authority = results.flatMap((r) => r.authority);
+
+        body.replaceChildren(
+          dim(
+            `;; ->>HEADER<<- opcode: QUERY, status: ${dnsStatusName(primary.status)}, qdcount: ${types.length}`,
+          ),
+          dim(';; flags: qr rd ra; QUERY: ' + types.length + ', ANSWER: ' + answers.length + ', AUTHORITY: ' + authority.length),
+          el('div', { class: 'mt-2 opacity-70' }, ';; QUESTION SECTION:'),
+          ...types.map((type) =>
+            el('div', {}, `;${name}.`.padEnd(32, ' '), `IN	${type}`),
+          ),
+        );
+
+        if (answers.length > 0) {
+          body.append(el('div', { class: 'mt-2 opacity-70' }, ';; ANSWER SECTION:'));
+          for (const rr of answers) body.append(rrLine(rr));
+        } else {
+          body.append(
+            el(
+              'div',
+              { class: 'mt-2 text-error' },
+              `;; no ${types.join('/')} records — status ${dnsStatusName(primary.status)}`,
+            ),
+          );
+        }
+
+        if (authority.length > 0 && answers.length === 0) {
+          body.append(el('div', { class: 'mt-2 opacity-70' }, ';; AUTHORITY SECTION:'));
+          for (const rr of authority.slice(0, 4)) body.append(rrLine(rr));
+        }
+
+        body.append(
+          dim(`;; Query time: ${results.reduce((sum, r) => sum + r.ms, 0)} msec`, 'mt-2 opacity-70'),
+          dim(`;; SERVER: ${primary.resolver}`, 'opacity-70'),
+          dim(`;; WHEN: ${new Date().toString()}`, 'opacity-70'),
+          dim(';; NOTE: resolution happens in your browser; the query name is visible to the resolver.', 'mt-2 opacity-50 text-[10px]'),
+        );
+      } catch (error) {
+        body.replaceChildren(
+          el(
+            'div',
+            { class: 'text-error' },
+            `;; connection to the resolvers failed: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+          dim(';; check your network, or the resolver may be rate limiting.', 'mt-1 opacity-70'),
+        );
+      }
+      scrollToEnd();
+    })();
+
+    return { node: wrapper, typewrite: false };
+  },
+
+  whois(args, ctx) {
+    const query = args[0]?.trim();
+    if (!query) {
+      return {
+        node: errorLine('whois: usage: whois <domain|ip>   e.g. whois tonykl.com'),
+        typewrite: false,
+      };
+    }
+    const wrapper = output('text-primary-container');
+    const body = el('div', { class: 'mt-1 opacity-70' }, `;; asking RDAP about ${query} …`);
+    wrapper.append(body);
+
+    const controller = new AbortController();
+    ctx.registerInterrupt(() => controller.abort());
+
+    void (async () => {
+      try {
+        const info = await rdapLookup(query, controller.signal);
+        const rows: Array<[string, string]> = [];
+        if (info.kind === 'domain') {
+          rows.push(['Domain Name', info.name]);
+          if (info.registrar) rows.push(['Registrar', info.registrar]);
+          if (info.createdAt) rows.push(['Created', info.createdAt]);
+          if (info.updatedAt) rows.push(['Updated', info.updatedAt]);
+          if (info.expiresAt) rows.push(['Expires', info.expiresAt]);
+          if (info.status.length) rows.push(['Status', info.status.join(', ')]);
+          if (info.nameservers.length) rows.push(['Name Servers', info.nameservers.join('\n')]);
+          if (info.dnssec) rows.push(['DNSSEC', info.dnssec]);
+          if (info.handle) rows.push(['Registry ID', info.handle]);
+        } else {
+          rows.push(['Network', info.name]);
+          if (info.network) rows.push(['CIDR', info.network]);
+          if (info.country) rows.push(['Country', info.country]);
+          if (info.handle) rows.push(['Handle', info.handle]);
+          if (info.status.length) rows.push(['Status', info.status.join(', ')]);
+        }
+
+        const grid = el('div', { class: 'mt-2 grid grid-cols-[110px_1fr] gap-x-3 gap-y-1 text-[11px]' });
+        for (const [label, value] of rows) {
+          grid.append(
+            el('span', { class: 'text-secondary opacity-80' }, label),
+            el('span', { class: 'text-white/90 whitespace-pre-wrap break-words' }, value),
+          );
+        }
+        body.replaceChildren(
+          el('div', { class: 'text-secondary tracking-widest text-[11px]' }, `RDAP RECORD — ${info.kind.toUpperCase()}`),
+          grid,
+          dim(`;; ${info.ms} msec via rdap.org bootstrap · source of truth: the responsible registry`, 'mt-2 opacity-50 text-[10px]'),
+        );
+      } catch (error) {
+        body.replaceChildren(
+          el(
+            'div',
+            { class: 'text-error' },
+            `whois: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+          dim(';; RDAP covers registered domains and IP allocations. Check the spelling, or try the IP form.', 'mt-1 opacity-70'),
+        );
+      }
+      scrollToEnd();
+    })();
+
+    return { node: wrapper, typewrite: false };
+  },
+
+  tour(_args, ctx) {
+    ctx.startTour();
+    return {
+      node: output('text-primary-container', 'tour: starting guided walkthrough — Ctrl+C to abort.'),
+      typewrite: false,
+    };
+  },
+
+  share(_args, ctx) {
+    const steps = ctx.history
+      .filter((c) => !c.startsWith('share') && c !== 'clear' && c !== 'reboot' && c !== 'tour')
+      .slice(-12);
+    if (steps.length === 0) {
+      return {
+        node: errorLine('share: nothing to replay yet — run a few commands first.'),
+        typewrite: false,
+      };
+    }
+    const url = `${window.location.origin}/?replay=${encodeURIComponent(steps.join(','))}`;
+    const box = output('text-primary-container');
+    const link = el(
+      'div',
+      { class: 'mt-1 break-all text-secondary select-all' },
+      url,
+    );
+    box.append(
+      el('div', {}, `replay link for ${steps.length} command${steps.length === 1 ? '' : 's'}:`),
+      link,
+      dim(';; anyone opening it watches this session type itself out.', 'mt-2 opacity-70 text-[10px]'),
+    );
+
+    navigator.clipboard
+      ?.writeText(url)
+      .then(() => {
+        box.append(dim(';; copied to clipboard.', 'mt-1 opacity-70 text-[10px]'));
+      })
+      .catch(() => {
+        box.append(dim(';; clipboard blocked — copy the line above.', 'mt-1 opacity-70 text-[10px]'));
+      });
+
+    return { node: box, typewrite: false };
+  },
+
+  dejavu(_args, ctx) {
+    ctx.dejavu();
+    return {
+      node: output('text-primary-container', 'there is no spoon.'),
+      typewrite: false,
+    };
   },
 
   ls(_args, ctx) {
@@ -1042,7 +1347,7 @@ export const commandNames = Object.keys(commands);
 export const commandHelp = helpRows;
 
 /** Easter eggs stay out of the palette — finding them is the point. */
-const SECRET_COMMANDS = new Set(['sudo', 'neo', 'redpill', 'bluepill']);
+const SECRET_COMMANDS = new Set(['sudo', 'neo', 'redpill', 'bluepill', 'dejavu']);
 
 /**
  * Everything the palette can offer: documented commands, labelled with the

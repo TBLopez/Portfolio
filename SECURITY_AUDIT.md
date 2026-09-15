@@ -21,9 +21,24 @@ runtime-adjacent dev dependency and it is pinned.
   through `innerHTML`. Command output is built from DOM nodes with
   `textContent`, so `echo "<script>"` prints literally
 - No user-generated content is accepted at runtime
-- Third-party requests at runtime: none. Fonts are self-hosted, sound is
-  synthesized with the Web Audio API, and the only external links are GitHub
-  and LinkedIn (`rel="noopener noreferrer"`)
+- Fonts are self-hosted, sound is synthesized with the Web Audio API, and the
+  only outbound links are GitHub and LinkedIn (`rel="noopener noreferrer"`)
+- **Runtime network calls are opt-in and visitor-initiated.** Three commands reach
+  public, key-less services *from the visitor's browser* — nothing is proxied
+  through this site and nothing is logged anywhere by it:
+  - `dig` → `cloudflare-dns.com/dns-query`, falling back to `dns.google/resolve`.
+    The queried name is visible to that resolver, which the command prints.
+  - `whois` → `rdap.org` bootstrap (which redirects to the responsible registry).
+  - `nmap` → one DoH A-record lookup to resolve the target. The port table is
+    generated locally from a hash of the resolved address and is labelled as
+    simulated in the output. No packets are sent to the scanned host.
+  All three pass a `domain`/`IP`-only string, time out after 8–9 s, and abort on
+  `Ctrl+C`.
+- At build time `index.astro` fetches the public GitHub repo list
+  (`api.github.com/users/TBLopez/repos`, unauthenticated, read-only, 7 s timeout,
+  failures ignored) so the directory stays current without a CMS. Only
+  name/description/language/URL fields are read; forks and archived repos are
+  dropped. This is the only build-time request besides Notion.
 
 ## Repository Hygiene
 - `node_modules/` used to be committed (1,910 files) and a Gatsby-era `.cache/`

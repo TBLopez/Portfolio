@@ -687,12 +687,61 @@ input:focus { outline: none; }
 }
 
 
+/* ──────────────────────────────────────────────────────────────
+   DÉJÀ VU — a cat walks past and the frame stutters.
+   Matrix lore: a déjà vu means they changed something.
+   ────────────────────────────────────────────────────────────── */
+#dejavu-cat {
+  position: fixed;
+  bottom: 16vh;
+  left: -180px;
+  z-index: 65;
+  opacity: 0;
+  pointer-events: none;
+  white-space: pre;
+  color: rgb(var(--c-primary-container));
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.05;
+  text-shadow: 0 0 12px rgb(var(--c-primary-container) / 0.7);
+  will-change: transform, opacity;
+}
+#dejavu-cat.walking {
+  animation: cat-walk 5.4s linear forwards;
+}
+@keyframes cat-walk {
+  0% { opacity: 0; transform: translateX(0) translateY(0); }
+  5% { opacity: 0.95; }
+  25% { transform: translateX(30vw) translateY(-5px); }
+  50% { transform: translateX(60vw) translateY(2px); }
+  75% { transform: translateX(90vw) translateY(-4px); }
+  95% { opacity: 0.95; }
+  100% { opacity: 0; transform: translateX(130vw) translateY(0); }
+}
+
+/* Frame stutter: transform only. Deliberately no `filter` on <body> — a
+   filtered ancestor becomes the containing block for every position:fixed
+   overlay and would drag the header and boot screen with it. */
+body.dejavu > *:not(#dejavu-cat):not(#glitch-overlay):not(.scanline) {
+  animation: dejavu-stutter 0.9s steps(1, end) 1;
+}
+@keyframes dejavu-stutter {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-3px, 1px); }
+  14% { transform: translate(4px, -1px); }
+  18% { transform: translate(-1px, 0); }
+  42% { transform: translate(2px, 1px); }
+  46% { transform: translate(-2px, -1px); }
+  50% { transform: translate(0, 0); }
+}
+
 /* Reduced motion: freeze all retro effects */
 @media (prefers-reduced-motion: reduce) {
   .scanline { display: none; }
   .cursor-blink { animation: none !important; }
   #matrix-rain { display: none !important; }
   #glitch-overlay { display: none !important; }
+  #dejavu-cat { display: none !important; }
   .palette { animation: none; }
   .achievement-toast {
     animation: none;

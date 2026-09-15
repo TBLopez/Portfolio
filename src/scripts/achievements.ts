@@ -25,6 +25,7 @@ export const ACHIEVEMENTS: Record<string, Achievement> = {
   the_one: { id: 'the_one', name: 'The One', hint: "Type 'neo'." },
   redpill: { id: 'redpill', name: 'Red Pill', hint: 'Take the red pill.' },
   bluepill: { id: 'bluepill', name: 'Blue Pill', hint: 'Take the blue pill.' },
+  dejavu: { id: 'dejavu', name: 'Déjà Vu', hint: 'They changed something. Watch for the cat.' },
 };
 
 type State = {
