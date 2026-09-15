@@ -25,9 +25,9 @@ export default {
       },
       fontFamily: {
         headline: ['Inter', 'system-ui', 'sans-serif'],
-        body: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
-        label: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
-        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        body: ['var(--font-mono)'],
+        label: ['var(--font-mono)'],
+        mono: ['var(--font-mono)'],
         ui: ['Inter', 'system-ui', 'sans-serif'],
       },
       borderRadius: {

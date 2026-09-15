@@ -6,6 +6,45 @@
 @import '@fontsource/jetbrains-mono/700.css';
 @import '@fontsource/jetbrains-mono/800.css';
 
+/* ----------------------------------------------------------------
+   Symbol-glyph top-up for JetBrains Mono.
+
+   @fontsource subsets JetBrains Mono by unicode-range, and none of
+   those subsets ship box-drawing/block/geometric glyphs. Without
+   them the browser falls back to a system font whose advance width
+   is NOT 0.6em, which shears every piece of monospace ASCII art in
+   the UI (banner, neofetch logo, 404 panel, log pane dots) by ~1.3px
+   per character. These two ~5KB files carry the missing glyphs at
+   the real 600/1000em advance so the art lines up on every OS.
+---------------------------------------------------------------- */
+@font-face {
+  font-family: 'JetBrains Mono Symbols';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('/fonts/jetbrains-mono-symbols-400-normal.woff2') format('woff2');
+  unicode-range: U+00B0, U+00B7, U+2022, U+2026, U+2190-21FF, U+2500-257F,
+    U+2580-259F, U+25A0-25FF, U+2B1B-2B1C;
+}
+@font-face {
+  font-family: 'JetBrains Mono Symbols';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('/fonts/jetbrains-mono-symbols-700-normal.woff2') format('woff2');
+  unicode-range: U+00B0, U+00B7, U+2022, U+2026, U+2190-21FF, U+2500-257F,
+    U+2580-259F, U+25A0-25FF, U+2B1B-2B1C;
+}
+@font-face {
+  font-family: 'JetBrains Mono Symbols';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800 900;
+  src: url('/fonts/jetbrains-mono-symbols-800-normal.woff2') format('woff2');
+  unicode-range: U+00B0, U+00B7, U+2022, U+2026, U+2190-21FF, U+2500-257F,
+    U+2580-259F, U+25A0-25FF, U+2B1B-2B1C;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -35,6 +74,11 @@
   --scanline-tint-a: 255 0 0;
   --scanline-tint-b: 0 255 0;
   --scanline-tint-c: 0 0 255;
+  /* Single source of truth for the terminal type stack. 'JetBrains Mono
+     Symbols' only ever matches the box-drawing/block range (see the
+     @font-face block above), so it can sit here safely. */
+  --font-mono: 'JetBrains Mono', 'JetBrains Mono Symbols', ui-monospace,
+    SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 [data-theme='amber'] {
@@ -121,7 +165,7 @@ html,
 body {
   background-color: rgb(var(--c-bg));
   color: rgb(var(--c-primary-container));
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -223,21 +267,26 @@ html { height: 100%; }
 /* ──────────────────────────────────────────────────────────────
    Scanline overlay (theme-aware tint)
    ────────────────────────────────────────────────────────────── */
+/* Scanlines.
+   The horizontal bands used to be 25% black on a 4px period, which
+   sliced 1px monospace stems (box-drawing borders, the `│` in the 404
+   panel) into a dashed mess at 2x. Halved the strength and tightened
+   the period so thin strokes stay solid while the CRT texture stays. */
 .scanline {
   background:
     linear-gradient(
       to bottom,
       rgba(18, 16, 16, 0) 50%,
-      rgba(0, 0, 0, 0.25) 50%
+      rgba(0, 0, 0, 0.12) 50%
     ),
     linear-gradient(
       to right,
-      rgb(var(--scanline-tint-a) / 0.06),
+      rgb(var(--scanline-tint-a) / 0.05),
       rgb(var(--scanline-tint-b) / 0.02),
-      rgb(var(--scanline-tint-c) / 0.06)
+      rgb(var(--scanline-tint-c) / 0.05)
     );
   background-size:
-    100% 4px,
+    100% 3px,
     3px 100%;
   pointer-events: none;
 }
@@ -288,9 +337,6 @@ html { height: 100%; }
 
 input:focus { outline: none; }
 
-#terminal-output::-webkit-scrollbar { width: 0; height: 0; }
-#terminal-output { scrollbar-width: none; }
-
 /* Matrix rain canvas */
 #matrix-rain {
   position: fixed;
@@ -311,7 +357,7 @@ input:focus { outline: none; }
   z-index: 80;
   background: rgb(var(--c-bg));
   color: rgb(var(--c-primary-container));
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   padding: 2rem 1.5rem;
   overflow: hidden;
   display: none;
@@ -362,7 +408,7 @@ input:focus { outline: none; }
   border: 1px solid rgb(var(--c-primary-container));
   color: rgb(var(--c-primary-container));
   padding: 0.6rem 0.8rem;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -378,7 +424,7 @@ input:focus { outline: none; }
 
 /* Live log feed pane */
 #log-pane {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.45;
   background: rgb(var(--c-surface) / 0.7);
@@ -390,6 +436,10 @@ input:focus { outline: none; }
   position: relative;
   flex-shrink: 0;
   transition: width 0.2s ease;
+  /* header + stream are flex children: no hard-coded "100% - 32px" math
+     that drifts as soon as the header font-size or padding changes */
+  display: flex;
+  flex-direction: column;
 }
 @media (min-width: 768px) {
   #log-pane {
@@ -399,8 +449,6 @@ input:focus { outline: none; }
 }
 #log-pane[hidden] { display: none !important; }
 #log-pane .log-header {
-  position: sticky;
-  top: 0;
   background: rgb(var(--c-surface) / 0.85);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -414,12 +462,17 @@ input:focus { outline: none; }
   justify-content: space-between;
   align-items: center;
   z-index: 1;
+  flex: none;
 }
 #log-pane .log-stream {
-  height: calc(100% - 32px);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
   padding: 0.5rem 0.75rem;
   position: relative;
+  /* fade the oldest line out instead of cutting it mid-glyph */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
 }
 #log-pane .log-line {
   white-space: nowrap;
@@ -433,7 +486,13 @@ input:focus { outline: none; }
 #log-pane .log-line.info { color: rgb(var(--c-secondary)); }
 @keyframes log-fade { to { opacity: 1; } }
 
-/* Theme-aware scrollbar for terminal output */
+/* Theme-aware scrollbar for terminal output.
+   Both engines now agree: a thin themed bar rather than hidden-in-Firefox
+   and visible-in-Chrome. */
+#terminal-output {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--c-outline-variant) / 0.6) transparent;
+}
 #terminal-output::-webkit-scrollbar { width: 4px; }
 #terminal-output::-webkit-scrollbar-track { background: transparent; }
 #terminal-output::-webkit-scrollbar-thumb {
@@ -442,6 +501,43 @@ input:focus { outline: none; }
 }
 #terminal-output::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--c-outline-variant) / 0.6);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   QUICK COMMAND CHIPS — one-tap commands in the welcome banner.
+   Typing on a phone keyboard to discover `help` is a bad first lap.
+   ────────────────────────────────────────────────────────────── */
+.cmd-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+.cmd-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.7rem;
+  color: rgb(var(--c-primary-container));
+  background: rgb(var(--c-surface) / 0.6);
+  border: 1px solid rgb(var(--c-outline-variant) / 0.5);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease,
+    box-shadow 0.18s ease, transform 0.18s ease;
+}
+.cmd-chip:hover,
+.cmd-chip:focus-visible {
+  background: rgb(var(--c-primary-container) / 0.12);
+  border-color: rgb(var(--c-primary-container) / 0.6);
+  box-shadow: 0 0 14px rgb(var(--c-primary-container) / 0.15);
+  transform: translateY(-1px);
+}
+.cmd-chip:active { transform: translateY(0); }
+.cmd-chip::before {
+  content: '$ ';
+  opacity: 0.55;
 }
 
 /* Reduced motion: freeze all retro effects */
