@@ -22,36 +22,65 @@ import Icon from './Icon.astro';
     </div>
   </div>
 
-  <nav aria-label="Primary" class="flex items-center gap-3 md:gap-6 shrink-0">
-    <ul class="hidden md:flex gap-4 m-0 p-0 list-none">
+  <nav aria-label="Primary" class="flex items-center gap-2 md:gap-4 shrink-0">
+    <ul class="hidden md:flex gap-2 m-0 p-0 list-none">
       <li>
+        <!-- Was a dead button: now it runs the real command. -->
         <button
           type="button"
+          data-command="ls"
           class="text-primary-container brightness-125 hover:bg-primary-container/10 hover:text-primary-container px-3 py-1 rounded-sm transition-all duration-200 font-ui text-xs tracking-wider hover-lift"
         >
           Directory
+        </button>
+      </li>
+      <li>
+        <button
+          type="button"
+          data-command="tail"
+          class="text-primary-container/80 hover:bg-primary-container/10 hover:text-primary-container px-3 py-1 rounded-sm transition-all duration-200 font-ui text-xs tracking-wider hover-lift"
+        >
+          Log Feed
         </button>
       </li>
     </ul>
     <button
       id="sfx-toggle"
       type="button"
-      class="text-[11px] md:text-[10px] text-primary-container/70 hover:text-primary-container px-2 py-2 md:py-0 transition-colors"
+      class="text-[11px] md:text-[10px] text-primary-container/80 hover:text-primary-container px-2 py-2 md:py-0 transition-colors"
       aria-pressed="true"
       aria-label="Toggle sound effects"
     >
       [SFX:ON]
     </button>
-    <div class="hidden sm:flex gap-2" aria-hidden="true">
-      <span class="p-1 text-primary-container/60 hover-lift"
-        ><Icon name="minimize" size={16} /></span
+    <div class="hidden sm:flex gap-1" role="group" aria-label="Window controls">
+      <button
+        type="button"
+        data-command="tail"
+        class="p-1.5 text-primary-container/70 hover:text-primary-container hover:bg-primary-container/10 rounded-sm transition-colors"
+        aria-label="Minimize — toggle the live log feed panel"
+        title="Minimize — toggle log feed"
       >
-      <span class="p-1 text-primary-container/60 hover-lift"
-        ><Icon name="maximize" size={16} /></span
+        <Icon name="minimize" size={16} />
+      </button>
+      <button
+        type="button"
+        data-action="fullscreen"
+        class="p-1.5 text-primary-container/70 hover:text-primary-container hover:bg-primary-container/10 rounded-sm transition-colors"
+        aria-label="Maximize — toggle fullscreen"
+        title="Maximize — fullscreen"
       >
-      <span class="p-1 text-primary-container/60 hover-lift"
-        ><Icon name="close" size={16} /></span
+        <Icon name="maximize" size={16} />
+      </button>
+      <button
+        type="button"
+        data-command="clear"
+        class="p-1.5 text-primary-container/70 hover:text-error hover:bg-primary-container/10 rounded-sm transition-colors"
+        aria-label="Close — clear the terminal output"
+        title="Close — clear terminal"
       >
+        <Icon name="close" size={16} />
+      </button>
     </div>
   </nav>
 </header>

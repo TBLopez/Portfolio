@@ -55,10 +55,10 @@ if (notionConnected) {
   }
 }
 
-const lastLogin = new Date()
-  .toUTCString()
-  .replace('GMT', 'UTC')
-  .toUpperCase();
+// Build-time fallback stamp. The client replaces it with the visitor's actual
+// previous session (see initTerminal) — a static site can't know that at build.
+const builtAt = new Date().toISOString();
+const lastLogin = new Date(builtAt).toUTCString().replace('GMT', 'UTC').toUpperCase();
 ---
 
 <Layout>
@@ -117,5 +117,5 @@ const lastLogin = new Date()
   id="terminal-data"
   type="application/json"
   is:inline
-  set:html={JSON.stringify({ notionProjects, notionConnected })}
+  set:html={JSON.stringify({ notionProjects, notionConnected, builtAt })}
 />

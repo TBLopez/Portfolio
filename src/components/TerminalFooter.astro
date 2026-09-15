@@ -13,13 +13,16 @@
     </label>
     <form
       id="cmd-form"
-      class="relative flex-1 flex items-center whitespace-pre overflow-hidden m-0 p-0"
+      class="relative flex-1 flex items-center overflow-hidden m-0 p-0"
       autocomplete="off"
     >
       <input
         id="cmd-input"
         name="command"
         autocomplete="off"
+        autocapitalize="off"
+        autocorrect="off"
+        enterkeyhint="send"
         autofocus
         aria-label="Terminal command input"
         aria-describedby="cmd-hint"
@@ -29,6 +32,14 @@
       />
       <button type="submit" class="hidden">Submit</button>
     </form>
+    <!-- Desktop-only discoverability strip: the shortcuts were previously
+         buried in the `help` output and an sr-only span. -->
+    <span
+      class="hidden xl:block shrink-0 text-[10px] uppercase tracking-widest text-primary-container/60"
+      aria-hidden="true"
+    >
+      tab complete · ↑↓ history · ctrl+l clear
+    </span>
   </div>
   <span id="cmd-hint" class="sr-only">
     Type a command such as help, ls, whoami, cat [file], history, or contact.

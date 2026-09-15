@@ -17,6 +17,13 @@ const BOOT_LINES: Array<{ text: string; delay: number; tag?: 'ok' | 'warn' }> = 
   { text: '> WELCOME, OPERATOR.', delay: 60 },
 ];
 
+/**
+ * Only one boot may own the overlay at a time. Running two of these
+ * concurrently (page load + `reboot`) used to interleave their DOM writes and
+ * the *older* run would tear the overlay down mid-sequence.
+ */
+let activeRun: { cancel: () => void } | null = null;
+
 function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
@@ -30,10 +37,24 @@ export function markBootShown(): void {
 }
 
 export async function runBoot(): Promise<void> {
+  // A fresh boot supersedes whatever is on screen.
+  activeRun?.cancel();
+
   const overlay = document.getElementById('boot-overlay');
   if (!overlay) return;
+
+  let cancelled = false;
+  const run = {
+    cancel: () => {
+      cancelled = true;
+    },
+  };
+  activeRun = run;
+
   overlay.innerHTML = '';
   overlay.classList.add('active');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('booting');
 
   const skip = document.createElement('button');
   skip.className = 'boot-skip';
@@ -41,15 +62,30 @@ export async function runBoot(): Promise<void> {
   skip.textContent = '[ SKIP ▶ ]';
   overlay.appendChild(skip);
 
-  let cancelled = false;
-  const cancel = () => {
-    cancelled = true;
+  const finish = () => {
+    window.clearTimeout(keyTimerId);
+    document.removeEventListener('keydown', onKey);
+    overlay.classList.remove('active');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('booting');
+    if (activeRun === run) activeRun = null;
+    markBootShown();
+    document.getElementById('cmd-input')?.focus();
   };
+
+  const cancel = () => run.cancel();
+
   skip.addEventListener('click', cancel);
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') cancel();
   };
-  document.addEventListener('keydown', onKey);
+  // Register on the next task, not synchronously: `reboot` kicks this off from
+  // inside the Enter keydown handler, and the very same event would still be
+  // bubbling when the listener attaches — cancelling the boot it just started.
+  const keyTimerId = window.setTimeout(
+    () => document.addEventListener('keydown', onKey),
+    0,
+  );
 
   const wait = (ms: number) =>
     new Promise<void>((res) => window.setTimeout(res, ms));
@@ -65,10 +101,14 @@ export async function runBoot(): Promise<void> {
     await wait(reduced ? 5 : line.delay);
   }
 
-  if (!cancelled) await wait(reduced ? 50 : 350);
-  overlay.classList.remove('active');
-  document.removeEventListener('keydown', onKey);
-  markBootShown();
-  // focus terminal input
-  document.getElementById('cmd-input')?.focus();
+  // Cancelled (or superseded). If another run has taken over the overlay we
+  // must not tear down its classes; if the user skipped, close as normal.
+  if (cancelled) {
+    if (activeRun === run) finish();
+    else document.removeEventListener('keydown', onKey);
+    return;
+  }
+
+  await wait(reduced ? 50 : 350);
+  finish();
 }

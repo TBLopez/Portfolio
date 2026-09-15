@@ -14,11 +14,18 @@ export type CommandContext = {
   history: string[];
   clear: () => void;
   toggleMatrix: () => boolean;
+  setMatrix: (on: boolean) => boolean;
+  matrixActive: () => boolean;
   toggleLogFeed: () => boolean;
   setTheme: (name: ThemeName) => void;
   themes: readonly ThemeName[];
   currentTheme: () => ThemeName;
   triggerReboot: () => Promise<void>;
+  setLastLogin: (label: string) => void;
+  /** Stop anything long-running (used by Ctrl+C and `clear`). */
+  interruptAll: () => void;
+  /** Register a cleanup for the current long-running output. */
+  registerInterrupt: (fn: () => void) => () => void;
 };
 
 export type CommandResult = {
@@ -87,12 +94,12 @@ export const commands: Record<string, Command> = {
     const status = ctx.notionConnected
       ? el(
           'div',
-          { class: 'mt-3 opacity-60 text-[10px] text-primary-container' },
+          { class: 'mt-3 opacity-70 text-[10px] text-primary-container' },
           'DATABASE UPLINK ACTIVE // CMS ENABLED',
         )
       : el(
           'div',
-          { class: 'mt-3 opacity-60 text-[10px] text-error' },
+          { class: 'mt-3 opacity-70 text-[10px] text-error' },
           'DATABASE UPLINK OFFLINE // LOCAL MODE',
         );
 
@@ -100,7 +107,7 @@ export const commands: Record<string, Command> = {
       'div',
       {
         class:
-          'mt-3 border-t border-outline-variant/40 pt-2 opacity-60 text-[10px]',
+          'mt-3 border-t border-outline-variant/40 pt-2 opacity-70 text-[10px]',
       },
       'SOCIAL_LINKS: ',
     );
@@ -110,7 +117,7 @@ export const commands: Record<string, Command> = {
         {
           href: 'https://github.com/TBLopez',
           target: '_blank',
-          rel: 'noopener',
+          rel: 'noopener noreferrer',
           class: 'hover:text-white underline',
         },
         'github',
@@ -121,7 +128,7 @@ export const commands: Record<string, Command> = {
         {
           href: 'https://www.linkedin.com/in/techtony/',
           target: '_blank',
-          rel: 'noopener',
+          rel: 'noopener noreferrer',
           class: 'hover:text-white underline',
         },
         'linkedin',
@@ -133,6 +140,11 @@ export const commands: Record<string, Command> = {
       el('div', {}, 'AVAILABLE COMMANDS:'),
       grid,
       socials,
+      el(
+        'div',
+        { class: 'mt-1 opacity-60 text-[10px]' },
+        'TIP: any command name above is clickable, and Tab completes. Arrow keys recall history.',
+      ),
       status,
     );
     return { node: box, typewrite: true };
@@ -151,8 +163,13 @@ export const commands: Record<string, Command> = {
       el('span', { class: 'block' }, 'TONY LOPEZ // SECURITY_ANALYST'),
       el(
         'span',
-        { class: 'block opacity-70 mt-1' },
+        { class: 'block opacity-80 mt-1' },
         'Specializing in security, penetration testing, and tactical development.',
+      ),
+      el(
+        'span',
+        { class: 'block opacity-80 mt-1' },
+        "Run 'ls' for archives, 'contact' for channels, or 'neofetch' for machine stats.",
       ),
     );
     return { node: box, typewrite: true };
@@ -189,14 +206,14 @@ export const commands: Record<string, Command> = {
       el(
         'div',
         { class: 'flex gap-3' },
-        el('span', { class: 'opacity-70 w-20' }, label),
+        el('span', { class: 'opacity-70 w-20 shrink-0' }, label),
         el(
           'a',
           {
             href,
             target: '_blank',
-            rel: 'noopener',
-            class: 'hover:text-white underline text-secondary',
+            rel: 'noopener noreferrer',
+            class: 'hover:text-white underline text-secondary break-all',
           },
           display,
         ),
@@ -207,6 +224,11 @@ export const commands: Record<string, Command> = {
         'linkedin',
         'https://www.linkedin.com/in/techtony/',
         'linkedin.com/in/techtony',
+      ),
+      el(
+        'div',
+        { class: 'mt-2 opacity-60 text-[10px]' },
+        'OPEN TO WORK // SECURITY ANALYST / SOC / PENTEST ROLES',
       ),
     );
     return { node: box, typewrite: true };
@@ -222,7 +244,7 @@ export const commands: Record<string, Command> = {
           el(
             'div',
             { class: 'grid grid-cols-[48px_1fr]' },
-            el('span', { class: 'opacity-50' }, String(i + 1).padStart(3, ' ')),
+            el('span', { class: 'opacity-60' }, String(i + 1).padStart(3, ' ')),
             el('span', {}, cmd),
           ),
         );
@@ -290,47 +312,99 @@ export const commands: Record<string, Command> = {
   },
 
   ls(_args, ctx) {
-    const grid = el('div', {
-      class: 'ml-4 mt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3',
-    });
-    for (const [name, file] of Object.entries(ctx.files)) {
-      const card = el(
+    const entries = Object.entries(ctx.files);
+    const wrapper = el('div', { class: 'ml-4 mt-2' });
+
+    if (entries.length === 0) {
+      // Previously this rendered an empty grid: indistinguishable from a
+      // command that silently failed.
+      wrapper.append(
+        el('div', { class: 'opacity-80' }, 'total 0 — no archives mounted.'),
+        el(
+          'div',
+          { class: 'mt-1 opacity-60 text-[11px]' },
+          ctx.notionConnected
+            ? 'Uplink is up but the database returned no entries. Check the data source.'
+            : "Uplink offline. Set NOTION_API_KEY + NOTION_DATA_SOURCE_ID to publish project entries.",
+        ),
+        el(
+          'div',
+          { class: 'mt-1 opacity-60 text-[11px]' },
+          "Try 'contact' for channels or 'whoami' for the operator profile.",
+        ),
+      );
+      return { node: wrapper, typewrite: false };
+    }
+
+    const openable = entries.filter(([, f]) => f.available).length;
+    wrapper.append(
+      el(
         'div',
+        { class: 'opacity-60 text-[10px] mb-2' },
+        `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · ${openable} open · ${entries.length - openable} sealed · click a card to cat it`,
+      ),
+    );
+
+    const grid = el('div', {
+      class: 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3',
+    });
+    // Available archives first so the useful stuff is top-left.
+    const ordered = [...entries].sort((a, b) => Number(b[1].available) - Number(a[1].available));
+    for (const [name, file] of ordered) {
+      const card = el(
+        'button',
         {
-          class:
-            'bento-card hover-lift',
+          type: 'button',
+          'data-command': `cat ${name}`,
+          'aria-label': file.available
+            ? `Open ${name}: ${file.desc}`
+            : `${name} is sealed: ${file.desc}`,
+          class: 'bento-card hover-lift text-left w-full cursor-pointer',
         },
         el(
           'div',
           {
-            class: `font-bold text-sm ${file.available ? 'text-primary-container' : 'text-primary-container/60'}`,
+            class: `font-bold text-sm flex items-center gap-2 ${file.available ? 'text-primary-container' : 'text-primary-container/60'}`,
           },
-          name,
+          el('span', { class: 'truncate' }, name),
           file.available
-            ? ''
-            : el('span', { class: 'ml-2 text-[9px] text-error' }, '[SEALED]'),
+            ? el('span', { class: 'ml-auto text-[9px] text-secondary shrink-0' }, '[OPEN]')
+            : el('span', { class: 'ml-auto text-[9px] text-error shrink-0' }, '[SEALED]'),
         ),
         el(
           'div',
-          { class: 'text-[10px] text-white/50 truncate mt-1' },
+          { class: 'text-[10px] text-white/60 mt-1 line-clamp-2' },
           file.desc,
         ),
+        file.tag
+          ? el('div', { class: 'text-[9px] opacity-50 mt-2 tracking-widest' }, file.tag)
+          : '',
       );
       grid.append(card);
     }
-    return { node: grid, typewrite: false };
+    wrapper.append(grid);
+    return { node: wrapper, typewrite: false };
   },
 
   cat(args, ctx) {
     const filename = args[0];
-    if (!filename) return { node: errorLine('cat: missing file operand'), typewrite: false };
+    if (!filename) {
+      return {
+        node: output(
+          'text-error',
+          "cat: missing file operand — usage: cat <file> (run 'ls' for the list)",
+        ),
+        typewrite: false,
+      };
+    }
     const file = ctx.files[filename];
-    if (!file)
+    if (!file) {
       return {
         node: errorLine(`cat: ${filename}: No such file or directory`),
         typewrite: false,
       };
-    if (!file.available || !file.url || file.url === '#')
+    }
+    if (!file.available || !file.url || file.url === '#') {
       return {
         node: output(
           'text-error',
@@ -338,10 +412,10 @@ export const commands: Record<string, Command> = {
         ),
         typewrite: false,
       };
+    }
 
     const wrapper = el('div', {
-      class:
-        'ml-4 mt-4 w-full max-w-4xl bg-surface border border-outline-variant mb-8',
+      class: 'ml-4 mt-4 w-full max-w-4xl bg-surface border border-outline-variant mb-8',
     });
     const header = el(
       'div',
@@ -349,31 +423,68 @@ export const commands: Record<string, Command> = {
         class:
           'bg-primary-container text-black text-[10px] font-bold px-2 py-1 flex justify-between items-center select-none uppercase tracking-widest',
       },
-      el('span', {}, `VIEWER_MODULE // ${filename}`),
+      el('span', { class: 'truncate' }, `VIEWER_MODULE // ${filename}`),
     );
     const link = el(
       'a',
       {
         href: file.url,
         target: '_blank',
-        rel: 'noopener',
+        rel: 'noopener noreferrer',
         class:
-          'hover:text-white transition-colors mr-2 flex items-center gap-1 bg-black/20 px-2 py-0.5',
+          'hover:bg-black hover:text-primary-container transition-colors mr-2 flex items-center gap-1 bg-black/15 px-2 py-0.5 shrink-0 font-bold',
         'aria-label': `Open ${filename} in a new tab`,
       },
       '[NEW_SYS_WINDOW]',
     );
     header.append(link);
-    const frameBox = el('div', { class: 'w-full bg-black p-1' });
-    const iframe = el('iframe', {
-      src: file.url,
-      class:
-        'w-full h-[60vh] border-none bg-white grayscale-[0.3] contrast-[1.1]',
-      title: filename,
-      loading: 'lazy',
-    });
-    frameBox.append(iframe);
-    wrapper.append(header, frameBox);
+    wrapper.append(header);
+
+    if (file.embed) {
+      const frameBox = el('div', { class: 'w-full bg-black p-1' });
+      frameBox.append(
+        el('iframe', {
+          src: file.url,
+          class:
+            'w-full h-[60vh] border-none bg-white grayscale-[0.3] contrast-[1.1]',
+          title: filename,
+          loading: 'lazy',
+        }),
+      );
+      wrapper.append(frameBox);
+    } else {
+      // GitHub, LinkedIn, Notion and friends all send X-Frame-Options/CSP
+      // headers, so an iframe here renders as a silent white void. Show the
+      // metadata and a real call to action instead.
+      wrapper.append(
+        el(
+          'div',
+          { class: 'p-4 flex flex-col gap-3' },
+          el('div', { class: 'text-[11px] opacity-80' }, file.desc),
+          el(
+            'div',
+            { class: 'text-[10px] opacity-60 break-all' },
+            file.url,
+          ),
+          el(
+            'div',
+            { class: 'text-[10px] opacity-60' },
+            'EXTERNAL RESOURCE — browsers block inline embedding, so this opens in a new tab.',
+          ),
+          el(
+            'a',
+            {
+              href: file.url,
+              target: '_blank',
+              rel: 'noopener noreferrer',
+              class:
+                'self-start border border-primary-container text-primary-container px-3 py-1.5 text-[11px] uppercase tracking-widest hover:bg-primary-container hover:text-black transition-colors',
+            },
+            'Open externally',
+          ),
+        ),
+      );
+    }
     unlock('archivist');
     return { node: wrapper, typewrite: false };
   },
@@ -381,14 +492,10 @@ export const commands: Record<string, Command> = {
   matrix(args, ctx) {
     const arg = (args[0] || '').toLowerCase();
     let on: boolean;
-    if (arg === 'on') {
-      ctx.toggleMatrix(); // ensure on
-      on = true;
-    } else if (arg === 'off') {
-      // call toggle if currently on; cheap approach: set explicitly via toggle if needed
-      const isOn = (document.getElementById('matrix-rain') as HTMLElement | null)?.classList.contains('active');
-      if (isOn) ctx.toggleMatrix();
-      on = false;
+    if (arg === 'on' || arg === 'off') {
+      // Explicit state: previously `matrix on` while the rain was already
+      // running toggled it OFF and still printed "rain enabled".
+      on = ctx.setMatrix(arg === 'on');
     } else {
       on = ctx.toggleMatrix();
     }
@@ -410,18 +517,22 @@ export const commands: Record<string, Command> = {
         el('div', {}, `current theme: ${ctx.currentTheme()}`),
         el(
           'div',
-          { class: 'opacity-70 mt-1' },
+          { class: 'opacity-80 mt-1' },
           `available: ${ctx.themes.join(', ')}`,
         ),
         el(
           'div',
-          { class: 'opacity-50 text-[10px] mt-1' },
-          'usage: theme <name>',
+          { class: 'opacity-60 text-[10px] mt-1' },
+          'usage: theme <name> | theme next',
         ),
       );
       return { node: box, typewrite: false };
     }
-    if (!(ctx.themes as readonly string[]).includes(requested)) {
+    const name =
+      requested === 'next'
+        ? ctx.themes[(ctx.themes.indexOf(ctx.currentTheme()) + 1) % ctx.themes.length]
+        : requested;
+    if (!(ctx.themes as readonly string[]).includes(name)) {
       return {
         node: errorLine(
           `theme: unknown palette "${requested}". try: ${ctx.themes.join(', ')}`,
@@ -429,12 +540,9 @@ export const commands: Record<string, Command> = {
         typewrite: false,
       };
     }
-    ctx.setTheme(requested as ThemeName);
+    ctx.setTheme(name as ThemeName);
     return {
-      node: output(
-        'text-primary-container',
-        `theme: switched to ${requested}.`,
-      ),
+      node: output('text-primary-container', `theme: switched to ${name}.`),
       typewrite: false,
     };
   },
@@ -464,7 +572,6 @@ export const commands: Record<string, Command> = {
 
   neofetch() {
     const ua = navigator.userAgent;
-    const platform = navigator.platform || 'unknown';
     const lang = navigator.language || 'en-US';
     const cores = (navigator.hardwareConcurrency || 1) + ' threads';
     const w = window.innerWidth;
@@ -477,24 +584,25 @@ export const commands: Record<string, Command> = {
       if (/safari/i.test(ua)) return 'Safari';
       return 'Unknown';
     })();
+    const theme = document.documentElement.getAttribute('data-theme') || 'matrix';
     const logo = [
-      '    ╔═══════════╗',
-      '    ║ ░░▒▒▓▓██  ║',
-      '    ║ ▓▓██▒▒░░  ║',
-      '    ║   FIREFLY ║',
-      '    ║   v.1.0.0 ║',
-      '    ╚═══════════╝',
+      '╔═══════════╗',
+      '║ ░░▒▒▓▓██  ║',
+      '║ ▓▓██▒▒░░  ║',
+      '║   FIREFLY ║',
+      '║   v.1.0.0 ║',
+      '╚═══════════╝',
     ];
     const stats: Array<[string, string]> = [
       ['operator', 'tony@firefly'],
       ['os', 'FireflyOS x86_64'],
       ['kernel', '6.0.8-firefly'],
       ['shell', '/bin/firefly-sh'],
+      ['theme', theme],
       ['terminal', browser],
-      ['platform', platform],
       ['language', lang],
       ['cpu', cores],
-      ['resolution', `${w}x${h} @ ${dpr}x`],
+      ['viewport', `${w}x${h} @ ${dpr}x`],
       ['uptime', `${Math.floor(performance.now() / 1000)}s`],
     ];
     const wrapper = el('div', { class: 'ml-4 mt-2 flex gap-4 flex-wrap' });
@@ -508,7 +616,7 @@ export const commands: Record<string, Command> = {
         el(
           'div',
           { class: 'flex gap-2' },
-          el('span', { class: 'text-secondary w-24' }, k),
+          el('span', { class: 'text-secondary w-24 shrink-0' }, k),
           el('span', { class: 'text-white' }, v),
         ),
       );
@@ -517,11 +625,11 @@ export const commands: Record<string, Command> = {
     return { node: wrapper, typewrite: false };
   },
 
-  top() {
+  top(_args, ctx) {
     const wrapper = el('div', {
       class: 'ml-4 mt-2 text-primary-container font-mono text-[12px]',
     });
-    const summary = el('div', { class: 'opacity-70' });
+    const summary = el('div', { class: 'opacity-80' });
     const headerRow = el(
       'div',
       {
@@ -536,18 +644,12 @@ export const commands: Record<string, Command> = {
     const body = el('div', { class: 'space-y-0.5 mt-1' });
     const footer = el(
       'div',
-      { class: 'mt-2 opacity-60 text-[10px]' },
-      'press q in real life · auto-stops in 8s',
+      { class: 'mt-2 opacity-70 text-[10px]' },
+      'live — press Ctrl+C to stop (auto-stops in 8s)',
     );
     wrapper.append(summary, headerRow, body, footer);
 
-    type Proc = {
-      pid: number;
-      cmd: string;
-      cpu: number;
-      mem: number;
-    };
-    const procs: Proc[] = [
+    const procs: Array<{ pid: number; cmd: string; cpu: number; mem: number }> = [
       { pid: 1, cmd: '/sbin/firefly-init', cpu: 0.1, mem: 0.5 },
       { pid: 217, cmd: 'sshd', cpu: 0.0, mem: 0.4 },
       { pid: 411, cmd: 'firefly-shell', cpu: 0.3, mem: 0.6 },
@@ -560,11 +662,25 @@ export const commands: Record<string, Command> = {
       { pid: 4096, cmd: 'gh-pages --watch', cpu: 0.2, mem: 0.5 },
     ];
 
+    let intervalId: number | undefined;
+    let timeoutId: number | undefined;
+    const stop = (label?: string) => {
+      if (intervalId) window.clearInterval(intervalId);
+      if (timeoutId) window.clearTimeout(timeoutId);
+      intervalId = undefined;
+      timeoutId = undefined;
+      dispose();
+      if (label) {
+        footer.textContent = label;
+        footer.classList.add('opacity-50');
+      }
+    };
+    const dispose = ctx.registerInterrupt(() => stop('— stopped —'));
+
     const tickProcs = () => {
       const now = new Date().toLocaleTimeString();
       const load = (Math.random() * 1.5 + 0.2).toFixed(2);
       summary.textContent = `top - ${now}  load avg: ${load}, ${(parseFloat(load) * 1.1).toFixed(2)}, ${(parseFloat(load) * 1.3).toFixed(2)}  ·  ${procs.length} tasks`;
-      // jitter cpu/mem a bit
       for (const p of procs) {
         p.cpu = Math.max(0, p.cpu + (Math.random() - 0.5) * 1.5);
         p.mem = Math.max(0, p.mem + (Math.random() - 0.5) * 0.4);
@@ -581,10 +697,7 @@ export const commands: Record<string, Command> = {
             el('span', {}, String(p.pid)),
             el(
               'span',
-              {
-                class:
-                  p.cpu > 5 ? 'text-error' : 'text-primary-container',
-              },
+              { class: p.cpu > 5 ? 'text-error' : 'text-primary-container' },
               p.cpu.toFixed(1),
             ),
             el('span', {}, p.mem.toFixed(1)),
@@ -595,12 +708,8 @@ export const commands: Record<string, Command> = {
     };
 
     tickProcs();
-    const id = window.setInterval(tickProcs, 900);
-    window.setTimeout(() => {
-      window.clearInterval(id);
-      footer.textContent = '— stopped —';
-      footer.classList.add('opacity-40');
-    }, 8000);
+    intervalId = window.setInterval(tickProcs, 900);
+    timeoutId = window.setTimeout(() => stop('— stopped —'), 8000);
 
     unlock('process_killer');
     return { node: wrapper, typewrite: false };
@@ -627,11 +736,7 @@ export const commands: Record<string, Command> = {
           const got = isUnlocked(a.id);
           return el(
             'div',
-            {
-              class: got
-                ? 'text-primary-container'
-                : 'text-white/40',
-            },
+            { class: got ? 'text-primary-container' : 'text-white/55' },
             el(
               'span',
               { class: 'inline-block w-5 opacity-80' },
@@ -640,7 +745,7 @@ export const commands: Record<string, Command> = {
             el('span', { class: 'font-bold' }, a.name),
             el(
               'span',
-              { class: 'block opacity-60 ml-5 text-[10px]' },
+              { class: 'block opacity-80 ml-5 text-[10px]' },
               got ? 'UNLOCKED' : a.hint,
             ),
           );
@@ -652,4 +757,7 @@ export const commands: Record<string, Command> = {
   },
 };
 
-export const commandNames = Object.keys(commands).concat(['clear']);
+// `clear` is already a key of `commands`, so appending it again used to make
+// commandNames one longer than the real command count — which made the
+// "Completionist" badge mathematically unreachable.
+export const commandNames = Object.keys(commands);

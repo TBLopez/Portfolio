@@ -4,12 +4,21 @@ interface Props {
 }
 
 const { lastLogin } = Astro.props;
+
+// One tap instead of a phone keyboard. Every chip is a real command.
+const chips: Array<{ cmd: string; label: string }> = [
+  { cmd: 'help', label: 'help' },
+  { cmd: 'whoami', label: 'whoami' },
+  { cmd: 'ls', label: 'ls' },
+  { cmd: 'contact', label: 'contact' },
+  { cmd: 'neofetch', label: 'neofetch' },
+];
 ---
 
 <section class="mb-4" id="welcome-message" aria-label="Session banner">
   {/* Full-size ASCII banner for tablets and up */}
   <pre
-    class="hidden sm:block text-primary-container text-[9px] md:text-[12px] leading-tight font-bold whitespace-pre overflow-x-hidden select-none mb-4"
+    class="hidden sm:block text-primary-container text-[9px] md:text-[12px] leading-tight font-bold whitespace-pre select-none mb-4"
     aria-hidden="true"
   >
 {`████████╗ ██████╗ ███╗   ██╗██╗   ██╗    ██╗      ██████╗ ██████╗ ███████╗███████╗
@@ -32,10 +41,62 @@ const { lastLogin } = Astro.props;
   </pre>
 
   <h1 class="sr-only">Tony Khawaja-Lopez — Security Analyst Portfolio</h1>
-  <div class="mt-4 opacity-60 text-xs text-white">
-    LAST LOGIN: {lastLogin}
+  <div class="mt-4 opacity-70 text-xs text-white">
+    LAST LOGIN: <span id="last-login-value">{lastLogin}</span>
   </div>
   <div class="mt-2 text-primary-container font-bold">
     Type <code>help</code> to see a list of available commands.
+  </div>
+
+  <div class="cmd-chips" role="group" aria-label="Suggested commands">
+    {chips.map(({ cmd, label }) => (
+      <button type="button" class="cmd-chip" data-command={cmd} aria-label={`Run ${label}`}>
+        {label}
+      </button>
+    ))}
+  </div>
+
+  {/*
+    A recruiters' five-second summary. The terminal used to open onto an empty
+    screen on a 1600px display; this keeps the prompt-hero clean while still
+    saying who this is without requiring a typed command.
+  */}
+  <div
+    class="mt-6 w-full max-w-2xl border border-outline-variant/50 bg-surface/40 px-4 py-3 font-mono text-[11px] leading-relaxed"
+  >
+    <div class="grid grid-cols-[76px_1fr] gap-x-3 gap-y-1 sm:grid-cols-[96px_1fr]">
+      <span class="text-secondary opacity-80">operator</span>
+      <span class="text-white">Tony Khawaja-Lopez</span>
+
+      <span class="text-secondary opacity-80">role</span>
+      <span class="text-white">Security Analyst</span>
+
+      <span class="text-secondary opacity-80">focus</span>
+      <span class="text-white">Penetration testing · threat intel · security operations</span>
+
+      <span class="text-secondary opacity-80">status</span>
+      <span class="text-primary-container">open to work</span>
+
+      <span class="text-secondary opacity-80">channels</span>
+      <span>
+        <a
+          href="https://github.com/TBLopez"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="underline hover:text-white text-secondary"
+        >
+          github
+        </a>
+        <span class="opacity-50"> · </span>
+        <a
+          href="https://www.linkedin.com/in/techtony/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="underline hover:text-white text-secondary"
+        >
+          linkedin
+        </a>
+      </span>
+    </div>
   </div>
 </section>

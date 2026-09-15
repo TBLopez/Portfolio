@@ -20,23 +20,42 @@ const { notionConnected } = Astro.props;
   id="sidebar"
   aria-label="System navigation"
   aria-hidden="true"
-  class="fixed md:static inset-y-0 left-0 z-40 -translate-x-full md:translate-x-0 transform transition-transform duration-200 flex flex-col h-full py-4 glass-strong rounded-r-lg md:rounded-none font-ui text-xs tracking-tighter w-64 border-r border-outline-variant/20 flex-shrink-0 md:aria-hidden:translate-x-0"
+  class="fixed md:static top-12 md:top-0 bottom-0 left-0 z-40 -translate-x-full md:translate-x-0 transform transition-transform duration-200 flex flex-col md:h-full py-4 glass-strong rounded-r-lg md:rounded-none font-ui text-xs tracking-tighter w-64 border-r border-outline-variant/20 flex-shrink-0"
 >
   <div class="px-4 mb-4">
-    <div class="text-primary-container font-black text-lg mb-1 glow-text-strong">SYSTEM_OS</div>
-    <div class="opacity-50 text-[10px]">V.1.0.0-STABLE</div>
+    <div class="text-primary-container font-black text-lg mb-1 glow-text-strong">
+      SYSTEM_OS
+    </div>
+    <div class="opacity-60 text-[10px]">V.1.0.0-STABLE</div>
   </div>
   <nav aria-label="Directory" class="flex-1 space-y-1 px-2">
-    <div
-      class="text-black bg-primary-container font-bold p-2 w-full flex items-center gap-3 rounded-sm glow-border"
+    <button
+      type="button"
+      data-command="ls"
+      aria-current="true"
+      class="text-black bg-primary-container font-bold p-2 w-full flex items-center gap-3 rounded-sm glow-border text-left cursor-pointer"
     >
       <Icon name="folder" size={16} />
       <span>Directory</span>
-    </div>
+    </button>
+    <button
+      type="button"
+      data-command="theme next"
+      class="w-full flex items-center gap-3 p-2 rounded-sm text-left cursor-pointer text-primary-container/80 hover:bg-primary-container/10 hover:text-primary-container transition-colors"
+    >
+      <Icon name="maximize" size={16} />
+      <span>Cycle Palette</span>
+    </button>
+    <button
+      type="button"
+      data-command="help"
+      class="w-full flex items-center gap-3 p-2 rounded-sm text-left cursor-pointer text-primary-container/80 hover:bg-primary-container/10 hover:text-primary-container transition-colors"
+    >
+      <Icon name="menu" size={16} />
+      <span>Command List</span>
+    </button>
   </nav>
-  <div
-    class="mt-auto px-4 border-t border-outline-variant/20 pt-4 opacity-60"
-  >
+  <div class="mt-auto px-4 border-t border-outline-variant/20 pt-4 opacity-70">
     <div class="flex items-center gap-2 mb-2">
       <div
         class="w-2 h-2 bg-primary-container rounded-full motion-safe:animate-pulse glow-sm"
@@ -45,8 +64,8 @@ const { notionConnected } = Astro.props;
       </div>
       <span>UPLINK_ESTABLISHED</span>
     </div>
-    <div class="text-[9px]">LOC: 127.0.0.1</div>
-    <div class="text-[9px]">
+    <div class="text-[10px]">LOC: 127.0.0.1</div>
+    <div class="text-[10px]">
       {notionConnected ? 'SEC: DATABASE_SYNC_ACTIVE' : 'SEC: LOCAL_MODE_ONLY'}
     </div>
   </div>
