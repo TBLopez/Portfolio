@@ -4,6 +4,7 @@ import TerminalHeader from '../components/TerminalHeader.astro';
 import TerminalSidebar from '../components/TerminalSidebar.astro';
 import TerminalFooter from '../components/TerminalFooter.astro';
 import WelcomeBanner from '../components/WelcomeBanner.astro';
+import { execSync } from 'node:child_process';
 import { Client } from '@notionhq/client';
 import type { NotionProject } from '../scripts/terminal';
 
@@ -59,6 +60,15 @@ if (notionConnected) {
 // previous session (see initTerminal) — a static site can't know that at build.
 const builtAt = new Date().toISOString();
 const lastLogin = new Date(builtAt).toUTCString().replace('GMT', 'UTC').toUpperCase();
+
+// Short commit stamp for `status`. Builds happen locally, so git is available;
+// fall back to 'dev' when it isn't (tarball, CI without checkout).
+let buildSha = 'dev';
+try {
+  buildSha = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+} catch {
+  /* ignore */
+}
 ---
 
 <Layout>
@@ -117,5 +127,5 @@ const lastLogin = new Date(builtAt).toUTCString().replace('GMT', 'UTC').toUpperC
   id="terminal-data"
   type="application/json"
   is:inline
-  set:html={JSON.stringify({ notionProjects, notionConnected, builtAt })}
+  set:html={JSON.stringify({ notionProjects, notionConnected, builtAt, buildSha })}
 />

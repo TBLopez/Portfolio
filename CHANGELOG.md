@@ -3,6 +3,18 @@
 ## 2026
 
 ### September
+- Rebuilt the sound: a mechanical switch under each keystroke, a falling-code tick as
+  the typewriter prints, a carriage-return thunk and bell on Enter, a data shimmer on
+  completion, a gated glitch on bad commands, a sub thump on boot, and a "digital rain"
+  ambience that runs while the matrix effect is on. `sfx on|off`, `sfx 0-100`, `sfx test`
+- Typing now feeds the rain: keystrokes surge the render loop and occasionally whoosh
+  the ambience
+- New `Ctrl+K` command palette — fuzzy filter over commands, actions and archives
+- New `status` report: real build SHA, runtime, network, audio state and a badge
+  progress bar. Boot POST lines now read real device values
+- New hidden commands `neo` (full-screen glitch), `redpill`, `bluepill` + three badges
+- Cleared the placeholder [SEALED] archives; `ls` lists only real, reachable targets
+  unless Notion is connected
 - Fixed the ASCII banner, `neofetch` logo and boot screens rendering as
   misaligned noise: added a 5 KB JetBrains Mono symbol subset so box-drawing
   and block glyphs stop falling back to a system font with the wrong advance

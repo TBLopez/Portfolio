@@ -23,12 +23,17 @@ The site boots like a machine, then hands you a prompt. Commands drive everythin
 | `help` | List every command |
 | `whoami` `pwd` `date` `echo` | The basics |
 | `ls` / `cat <file>` | Browse and open archives |
+| `status` | Build, runtime, audio and badge progress report |
 | `nmap` `top` `neofetch` | Simulated recon, process list, system info |
 | `matrix` `theme` `tail` | Rain effect, palette, live log pane |
+| `sfx` | Sound: `sfx on`, `sfx off`, `sfx 60`, `sfx test` |
+| `palette` | Command palette (or just hit `Ctrl+K`) |
 | `reboot` | Replay the boot sequence |
 | `achievements` `history` `contact` | Badges, command history, channels |
 
-Keyboard: `Tab` completes (and cycles matches), `↑`/`↓` walk history, `Ctrl+L` clears, `Ctrl+C` cancels the current output. Every command name in `help`, every `ls` card, and the header buttons are clickable too.
+Four commands are unlisted — the badge list gives hints.
+
+Keyboard: `Ctrl+K` (or `Ctrl+P`) opens the command palette, `Tab` completes and cycles matches, `↑`/`↓` walk history, `Ctrl+L` clears, `Ctrl+C` cancels the current output. Every command name in `help`, every `ls` card, the sidebar and the header buttons are clickable too. Typing also feeds the rain — the drops speed up under your fingers.
 
 ## Themes
 
@@ -81,8 +86,9 @@ Edit `src/data/systemFiles.ts`. Each entry is `{ desc, url, available, embed?, t
 
 Monospaced, uppercase, blinking cursors. The palette is one accent on near-black; everything else is hierarchy. Details live in `DESIGN.md`.
 
-Two things worth knowing before you touch the art:
+Three things worth knowing before you touch the art or the audio:
 
+0. Sound is fully synthesized (`src/scripts/audio.ts`): a mechanical switch under your finger, a falling-code tick for printed characters, a carriage-return thunk and bell on Enter, a data shimmer when a block finishes, a gated glitch for bad commands, a sub thump on boot, and an ambient "digital rain" bed with randomly panned crackles that runs while the matrix effect is on. No audio files and no third-party requests — all of it behind the SFX master gain (`sfx 0-100`).
 1. The banner, the `neofetch` logo and the boot screen are monospace ASCII art. They only line up because `public/fonts/jetbrains-mono-symbols-*.woff2` supplies the box-drawing and block glyphs at the font's true 0.6em advance. `@fontsource` subsets JetBrains Mono by unicode-range and ships none of them, so without that subset the browser substitutes a system font with a different advance and every piece of art shears apart.
 2. The scanline overlay is deliberately weak (12% black on a 3px period). Anything stronger turns 1px stems into dashes.
 

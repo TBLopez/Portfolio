@@ -1,5 +1,6 @@
 import type { SystemFile } from '../data/systemFiles';
 import type { ThemeName } from '../scripts/themes';
+import type { SfxState, SfxVoice } from '../scripts/audio';
 import {
   ACHIEVEMENTS,
   getAll,
@@ -17,6 +18,7 @@ export type CommandContext = {
   setMatrix: (on: boolean) => boolean;
   matrixActive: () => boolean;
   toggleLogFeed: () => boolean;
+  logVisible: () => boolean;
   setTheme: (name: ThemeName) => void;
   themes: readonly ThemeName[];
   currentTheme: () => ThemeName;
@@ -26,6 +28,19 @@ export type CommandContext = {
   interruptAll: () => void;
   /** Register a cleanup for the current long-running output. */
   registerInterrupt: (fn: () => void) => () => void;
+  /** Sound engine surface. */
+  sfx: {
+    state: () => SfxState;
+    setMuted: (muted: boolean) => void;
+    setVolume: (volume: number) => void;
+    play: (voice: SfxVoice) => void;
+  };
+  /** Ctrl+K overlay. */
+  openPalette: () => void;
+  /** Full-screen Matrix flash. */
+  glitch: (messages: string[]) => void;
+  /** Injected at build time. */
+  build: { sha: string; builtAt: string };
 };
 
 export type CommandResult = {
@@ -66,17 +81,21 @@ const helpRows: Array<[string, string]> = [
   ['echo [text]', 'Print arguments'],
   ['ls', 'List available archives'],
   ['cat [file]', 'Open archive inline'],
+  ['status', 'Build, runtime and progress report'],
   ['nmap [host]', 'Scan a host (simulated)'],
   ['top', 'Live process list'],
   ['neofetch', 'System information'],
   ['matrix', 'Toggle matrix rain effect'],
   ['theme [name]', 'Switch palette: matrix/amber/ice/dracula/mono'],
+  ['sfx', 'Sound: on/off, volume 0-100, test'],
   ['tail', 'Toggle live log feed pane'],
   ['reboot', 'Replay the boot sequence'],
+  ['palette', 'Open the command palette (Ctrl+K)'],
   ['achievements', 'Show operator badges'],
   ['contact', 'Show contact channels'],
   ['history', 'Show recent commands'],
   ['clear', 'Clear terminal output (Ctrl+L)'],
+  ['help', 'Show this command list'],
 ];
 
 export const commands: Record<string, Command> = {
@@ -142,8 +161,13 @@ export const commands: Record<string, Command> = {
       socials,
       el(
         'div',
-        { class: 'mt-1 opacity-60 text-[10px]' },
-        'TIP: any command name above is clickable, and Tab completes. Arrow keys recall history.',
+        { class: 'mt-1 opacity-70 text-[10px]' },
+        'TIP: Ctrl+K opens the command palette. Tab completes, ↑↓ recall history, and every command name here is clickable.',
+      ),
+      el(
+        'div',
+        { class: 'mt-1 opacity-50 text-[10px]' },
+        'Unlisted commands exist. Operator badges know more.',
       ),
       status,
     );
@@ -715,6 +739,258 @@ export const commands: Record<string, Command> = {
     return { node: wrapper, typewrite: false };
   },
 
+  status(_args, ctx) {
+    const wrapper = el('div', { class: 'ml-4 mt-2 text-primary-container' });
+    const ua = navigator.userAgent;
+    const os = (() => {
+      if (/android/i.test(ua)) return 'Android';
+      if (/iphone|ipad|ipod/i.test(ua)) return 'iOS';
+      if (/mac os x|macintosh/i.test(ua)) return 'macOS';
+      if (/windows/i.test(ua)) return 'Windows';
+      if (/linux/i.test(ua)) return 'Linux';
+      return 'unknown';
+    })();
+    const browser = (() => {
+      if (/firefox/i.test(ua)) return 'Firefox';
+      if (/edg/i.test(ua)) return 'Edge';
+      if (/chrome/i.test(ua)) return 'Chrome';
+      if (/safari/i.test(ua)) return 'Safari';
+      return 'unknown';
+    })();
+    const conn = (navigator as Navigator & { connection?: { effectiveType?: string } })
+      .connection;
+    const heap = (
+      performance as Performance & { memory?: { usedJSHeapSize: number } }
+    ).memory;
+    const sfx = ctx.sfx.state();
+    const uptime = performance.now() / 1000;
+    const uptimeLabel =
+      uptime > 3600
+        ? `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`
+        : uptime > 60
+          ? `${Math.floor(uptime / 60)}m ${Math.floor(uptime % 60)}s`
+          : `${uptime.toFixed(1)}s`;
+    const badges = getUnlocked().length;
+    const total = getAll().length;
+
+    const rows: Array<[string, string]> = [
+      [
+        'build',
+        `${ctx.build.sha} · deployed ${new Date(ctx.build.builtAt)
+          .toISOString()
+          .replace('T', ' ')
+          .slice(0, 16)} UTC`,
+      ],
+      ['runtime', `${browser} · ${os} · ${navigator.hardwareConcurrency || '?'} threads`],
+      [
+        'viewport',
+        `${window.innerWidth}×${window.innerHeight} @${window.devicePixelRatio || 1}x · ${navigator.language}`,
+      ],
+      [
+        'network',
+        navigator.onLine
+          ? `online${conn?.effectiveType ? ` (${conn.effectiveType})` : ''}`
+          : 'offline',
+      ],
+      ['audio', sfx.muted ? 'muted' : `on · ${Math.round(sfx.volume * 100)}% vol${sfx.ambient ? ' · rain bed live' : ''}`],
+      [
+        'effects',
+        `theme ${ctx.currentTheme()} · rain ${ctx.matrixActive() ? 'on' : 'off'} · log feed ${ctx.logVisible() ? 'on' : 'off'}`,
+      ],
+      ['session', `${uptimeLabel} · ${ctx.history.length} commands issued`],
+    ];
+    if (heap) {
+      rows.push([
+        'heap',
+        `${(heap.usedJSHeapSize / 1048576).toFixed(1)} MB JS heap in use`,
+      ]);
+    }
+
+    const grid = el('div', { class: 'mt-2 grid grid-cols-[88px_1fr] gap-x-3 gap-y-1 text-[11px]' });
+    for (const [k, v] of rows) {
+      grid.append(
+        el('span', { class: 'text-secondary opacity-80' }, k),
+        el('span', { class: 'text-white/90 break-words' }, v),
+      );
+    }
+
+    const pct = total === 0 ? 0 : Math.round((badges / total) * 100);
+    const progress = el('div', {
+      class: 'mt-3 stat-bar',
+      role: 'progressbar',
+      'aria-valuenow': String(badges),
+      'aria-valuemin': '0',
+      'aria-valuemax': String(total),
+      'aria-label': `Operator badges: ${badges} of ${total}`,
+    });
+    progress.append(el('span', { style: `width:${pct}%` }));
+
+    wrapper.append(
+      el('div', { class: 'text-secondary tracking-widest text-[11px]' }, 'FIREFLY STATUS REPORT'),
+      grid,
+      el(
+        'div',
+        { class: 'mt-3 text-[11px]' },
+        `OPERATOR PROGRESS — ${badges}/${total} badges (${pct}%)`,
+      ),
+      progress,
+      el(
+        'div',
+        { class: 'mt-2 opacity-70 text-[10px]' },
+        "Run 'achievements' for the full badge list.",
+      ),
+    );
+    return { node: wrapper, typewrite: false };
+  },
+
+  sfx(args, ctx) {
+    const arg = (args[0] || '').toLowerCase();
+    const state = ctx.sfx.state();
+
+    if (arg === 'on') {
+      ctx.sfx.setMuted(false);
+      ctx.sfx.play('done');
+      return {
+        node: output('text-primary-container', 'sfx: enabled.'),
+        typewrite: false,
+      };
+    }
+    if (arg === 'off') {
+      ctx.sfx.setMuted(true);
+      unlock('go_dark');
+      return {
+        node: output('text-primary-container', 'sfx: muted. The room goes quiet.'),
+        typewrite: false,
+      };
+    }
+    if (arg === 'test') {
+      const voices: Array<'key' | 'type' | 'enter' | 'done' | 'error' | 'boot'> = [
+        'key',
+        'type',
+        'enter',
+        'done',
+        'error',
+        'boot',
+      ];
+      const timers: number[] = [];
+      voices.forEach((voice, i) => {
+        timers.push(window.setTimeout(() => ctx.sfx.play(voice), 120 + i * 420));
+      });
+      ctx.registerInterrupt(() => timers.forEach((id) => window.clearTimeout(id)));
+      return {
+        node: output(
+          'text-primary-container',
+          'sfx: playing the full voice set — key · type · enter · done · error · boot',
+        ),
+        typewrite: false,
+      };
+    }
+
+    const maybeVolume = Number.parseInt(arg, 10);
+    if (arg && Number.isFinite(maybeVolume)) {
+      if (maybeVolume < 0 || maybeVolume > 100) {
+        return { node: errorLine('sfx: volume must be 0-100'), typewrite: false };
+      }
+      ctx.sfx.setMuted(maybeVolume === 0);
+      ctx.sfx.setVolume(maybeVolume / 100);
+      if (maybeVolume > 0) ctx.sfx.play('done');
+      return {
+        node: output('text-primary-container', `sfx: volume set to ${maybeVolume}%.`),
+        typewrite: false,
+      };
+    }
+    if (arg && !['status', 'volume'].includes(arg)) {
+      return {
+        node: errorLine(
+          `sfx: unknown option "${arg}". try: sfx on | sfx off | sfx 0-100 | sfx test`,
+        ),
+        typewrite: false,
+      };
+    }
+
+    const box = output('text-primary-container');
+    box.append(
+      el(
+        'div',
+        {},
+        `state: ${state.muted ? 'MUTED' : `ON at ${Math.round(state.volume * 100)}%`}`,
+      ),
+      el(
+        'div',
+        { class: 'opacity-80 mt-1' },
+        `engine: ${state.ready ? 'audio context live' : 'idle until first interaction'}`,
+      ),
+      el(
+        'div',
+        { class: 'opacity-80' },
+        `rain bed: ${state.ambient ? 'playing' : 'off'}`,
+      ),
+      el(
+        'div',
+        { class: 'opacity-60 text-[10px] mt-1' },
+        'the keyboard is a mechanical switch, the print head is a falling-code tick, and enter rings the carriage bell',
+      ),
+      el(
+        'div',
+        { class: 'opacity-60 text-[10px]' },
+        'usage: sfx on | sfx off | sfx 0-100 | sfx test',
+      ),
+    );
+    return { node: box, typewrite: false };
+  },
+
+  palette(_args, ctx) {
+    ctx.openPalette();
+    return {
+      node: output(
+        'text-primary-container',
+        'palette: opened — type to filter, ⏎ to run, esc to close.',
+      ),
+      typewrite: false,
+    };
+  },
+
+  neo(_args, ctx) {
+    unlock('the_one');
+    ctx.glitch(['WAKE UP, NEO…', 'THE MATRIX HAS YOU', 'FOLLOW THE WHITE RABBIT']);
+    ctx.setMatrix(true);
+    ctx.sfx.play('boot');
+    return {
+      node: output(
+        'text-primary-container font-bold tracking-widest',
+        'neo: knock, knock.',
+      ),
+      typewrite: false,
+    };
+  },
+
+  redpill(_args, ctx) {
+    unlock('redpill');
+    ctx.setTheme('matrix');
+    ctx.setMatrix(true);
+    ctx.sfx.play('surge');
+    return {
+      node: output(
+        'text-primary-container',
+        'you take the red pill — you stay in Wonderland, and I show you how deep the rabbit hole goes.',
+      ),
+      typewrite: true,
+    };
+  },
+
+  bluepill(_args, ctx) {
+    unlock('bluepill');
+    ctx.setTheme('mono');
+    ctx.setMatrix(false);
+    return {
+      node: output(
+        'text-primary-container',
+        'you take the blue pill — the story ends, you wake in your bed and believe whatever you want to believe.',
+      ),
+      typewrite: true,
+    };
+  },
+
   achievements() {
     const all = getAll();
     const wrapper = el('div', {
@@ -761,3 +1037,36 @@ export const commands: Record<string, Command> = {
 // commandNames one longer than the real command count — which made the
 // "Completionist" badge mathematically unreachable.
 export const commandNames = Object.keys(commands);
+
+/** Documented commands, for the help grid and the Ctrl+K palette. */
+export const commandHelp = helpRows;
+
+/** Easter eggs stay out of the palette — finding them is the point. */
+const SECRET_COMMANDS = new Set(['sudo', 'neo', 'redpill', 'bluepill']);
+
+/**
+ * Everything the palette can offer: documented commands, labelled with the
+ * usage line from `help` so "cat [file]" doesn't show up as "undocumented".
+ */
+export function paletteEntries(): Array<{
+  command: string;
+  label: string;
+  desc: string;
+  kind: 'command' | 'archive' | 'action';
+}> {
+  const usage = new Map<string, string>();
+  const described = new Map<string, string>();
+  for (const [usageLine, desc] of helpRows) {
+    const name = usageLine.split(' ')[0];
+    usage.set(name, usageLine);
+    described.set(name, desc);
+  }
+  return commandNames
+    .filter((name) => !SECRET_COMMANDS.has(name))
+    .map((name) => ({
+      command: name,
+      label: usage.get(name) ?? name,
+      desc: described.get(name) ?? 'unlisted command',
+      kind: 'command' as const,
+    }));
+}

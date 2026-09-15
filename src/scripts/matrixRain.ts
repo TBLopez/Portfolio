@@ -9,6 +9,8 @@ type Engine = {
   stop: () => void;
   toggle: () => boolean;
   isActive: () => boolean;
+  /** Fast burst: typing feeds the rain. */
+  surge: () => void;
 };
 
 let singleton: Engine | null = null;
@@ -22,6 +24,8 @@ export function getMatrixRain(): Engine {
   let rafId: number | null = null;
   let lastFrame = 0;
   let active = false;
+  let boostUntil = 0;
+  let surgeTimer: number | undefined;
   const cellSize = 16;
 
   const ensureCanvas = () => {
@@ -54,7 +58,8 @@ export function getMatrixRain(): Engine {
 
   const tick = (now: number) => {
     if (!active || !ctx || !canvas) return;
-    if (now - lastFrame < 55) {
+    const surging = now < boostUntil;
+    if (now - lastFrame < (surging ? 32 : 55)) {
       rafId = requestAnimationFrame(tick);
       return;
     }
@@ -86,7 +91,7 @@ export function getMatrixRain(): Engine {
       if (y > window.innerHeight && Math.random() > 0.965) {
         drops[i] = 0;
       }
-      drops[i]++;
+      drops[i] += surging ? 2 : 1;
     }
     rafId = requestAnimationFrame(tick);
   };
@@ -114,6 +119,19 @@ export function getMatrixRain(): Engine {
       return active;
     },
     isActive: () => active,
+    surge: () => {
+      if (!active || !canvas) return;
+      boostUntil = performance.now() + 280;
+      // Seed a few fresh streams from the top so the burst is visible even if
+      // every existing column is already mid-screen.
+      const seeds = Math.max(2, Math.floor(drops.length * 0.05));
+      for (let i = 0; i < seeds; i++) {
+        drops[Math.floor(Math.random() * drops.length)] = 0;
+      }
+      canvas.classList.add('surge');
+      if (surgeTimer) window.clearTimeout(surgeTimer);
+      surgeTimer = window.setTimeout(() => canvas?.classList.remove('surge'), 280);
+    },
   };
   return singleton;
 }

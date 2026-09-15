@@ -1,7 +1,8 @@
-import { audio } from './audio';
+import { audio, type SfxState, type SfxVoice } from './audio';
 import {
   commands,
   commandNames,
+  paletteEntries,
   type CommandContext,
 } from '../commands/index';
 import { localFiles, type SystemFile } from '../data/systemFiles';
@@ -16,6 +17,7 @@ import {
 } from './themes';
 import { trackCommand, trackTheme, unlock } from './achievements';
 import { runBoot, shouldShowBoot } from './boot';
+import { createPalette, type PaletteEntry } from './palette';
 
 export type NotionProject = {
   id: string;
@@ -27,8 +29,9 @@ export type NotionProject = {
 export type TerminalInit = {
   notionProjects: NotionProject[];
   notionConnected: boolean;
-  /** Build timestamp, used as the LAST LOGIN fallback for first-time visitors. */
+  /** Injected at build time, surfaced by `status`. */
   builtAt?: string;
+  buildSha?: string;
 };
 
 function prefersReducedMotion(): boolean {
@@ -141,6 +144,40 @@ export function initTerminal(init: TerminalInit): void {
   const matrix = getMatrixRain();
   const logFeed = getLogFeed();
 
+  // Rain on/off also drives the ambient sound bed.
+  const applyMatrix = (on: boolean): boolean => {
+    if (on) matrix.start();
+    else matrix.stop();
+    const active = matrix.isActive();
+    audio.setAmbient(active);
+    return active;
+  };
+
+  const glitchOverlay = document.getElementById('glitch-overlay');
+  let glitchTimer: number | undefined;
+  const glitch = (messages: string[]): void => {
+    if (!glitchOverlay || prefersReducedMotion()) return;
+    let index = 0;
+    const step = () => {
+      if (!glitchOverlay) return;
+      glitchOverlay.textContent = messages[index] ?? '';
+      glitchOverlay.classList.remove('active');
+      // Restart the keyframes even if the class was just removed.
+      void glitchOverlay.offsetWidth;
+      glitchOverlay.classList.add('active');
+      index++;
+      if (index < messages.length) {
+        glitchTimer = window.setTimeout(step, 820);
+      } else {
+        glitchTimer = window.setTimeout(() => {
+          glitchOverlay.classList.remove('active');
+        }, 2400);
+      }
+    };
+    if (glitchTimer) window.clearTimeout(glitchTimer);
+    step();
+  };
+
   const ctx: CommandContext = {
     files,
     notionConnected: init.notionConnected,
@@ -152,14 +189,11 @@ export function initTerminal(init: TerminalInit): void {
     },
     interruptAll,
     registerInterrupt,
-    toggleMatrix: () => matrix.toggle(),
-    setMatrix: (on: boolean) => {
-      if (on) matrix.start();
-      else matrix.stop();
-      return matrix.isActive();
-    },
+    toggleMatrix: () => applyMatrix(!matrix.isActive()),
+    setMatrix: (on: boolean) => applyMatrix(on),
     matrixActive: () => matrix.isActive(),
     toggleLogFeed: () => logFeed.toggle(),
+    logVisible: () => logFeed.isVisible(),
     setTheme: (name: ThemeName) => {
       applyTheme(name);
       trackTheme(name, THEMES);
@@ -173,6 +207,18 @@ export function initTerminal(init: TerminalInit): void {
     setLastLogin: (label: string) => {
       const el = document.getElementById('last-login-value');
       if (el) el.textContent = label;
+    },
+    sfx: {
+      state: () => audio.getState(),
+      setMuted: (muted: boolean) => audio.setMuted(muted),
+      setVolume: (volume: number) => audio.setVolume(volume),
+      play: (voice: SfxVoice) => audio.play(voice),
+    },
+    openPalette: () => palette.open(),
+    glitch,
+    build: {
+      sha: init.buildSha || 'dev',
+      builtAt: init.builtAt || new Date().toISOString(),
     },
   };
 
@@ -204,20 +250,34 @@ export function initTerminal(init: TerminalInit): void {
   const oneShotInit = () => audio.init();
   document.addEventListener('keydown', oneShotInit, { once: true });
   document.addEventListener('click', oneShotInit, { once: true });
+  document.addEventListener('pointerdown', oneShotInit, { once: true });
 
-  // SFX mute toggle button wiring
+  // ── SFX toggle ───────────────────────────────────────────────────────
   const sfxBtn = document.getElementById('sfx-toggle') as HTMLButtonElement | null;
-  const syncSfxBtn = (muted: boolean) => {
+  const syncSfxBtn = (state: SfxState) => {
     if (!sfxBtn) return;
-    sfxBtn.textContent = muted ? '[SFX:OFF]' : '[SFX:ON]';
-    sfxBtn.setAttribute('aria-pressed', muted ? 'false' : 'true');
+    const pct = Math.round(state.volume * 100);
+    sfxBtn.textContent = state.muted ? '[SFX:OFF]' : `[SFX:ON ${pct}%]`;
+    sfxBtn.setAttribute('aria-pressed', String(!state.muted));
+    sfxBtn.setAttribute(
+      'aria-label',
+      state.muted
+        ? 'Sound effects muted — activate to enable'
+        : `Sound effects at ${pct} percent — activate to mute`,
+    );
+    sfxBtn.title = state.muted
+      ? 'SFX muted (type: sfx on)'
+      : `SFX ${pct}% (type: sfx 0-100)`;
   };
-  syncSfxBtn(audio.isMuted());
+  syncSfxBtn(audio.getState());
   audio.onChange(syncSfxBtn);
   sfxBtn?.addEventListener('click', () => {
     audio.toggle();
     if (audio.isMuted()) unlock('go_dark');
-    if (!audio.isMuted()) audio.init();
+    if (!audio.isMuted()) {
+      audio.init();
+      audio.play('done');
+    }
   });
 
   // ── Mobile sidebar drawer ────────────────────────────────────────────
@@ -258,12 +318,16 @@ export function initTerminal(init: TerminalInit): void {
   });
   sidebarScrim?.addEventListener('click', () => closeSidebar(true));
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && sidebar?.getAttribute('aria-hidden') === 'false' && !desktopQuery.matches) {
+    if (
+      e.key === 'Escape' &&
+      sidebar?.getAttribute('aria-hidden') === 'false' &&
+      !desktopQuery.matches
+    ) {
       closeSidebar(true);
     }
   });
 
-  // Typewriter that can be skipped.
+  // ── Typewriter ───────────────────────────────────────────────────────
   // Duration is capped so a 60-line `help` dump doesn't take four seconds,
   // and the live region is marked busy while glyphs are being appended so
   // screen readers don't announce every character.
@@ -394,6 +458,7 @@ export function initTerminal(init: TerminalInit): void {
       result = handler(args, ctx) ?? null;
     } else {
       result = { node: unknownCommand(cmd), typewrite: false };
+      audio.play('error');
     }
 
     if (!result) return;
@@ -405,9 +470,52 @@ export function initTerminal(init: TerminalInit): void {
     if (result.typewrite) {
       await typewrite(result.node);
     }
-    // Tapping a chip on a phone shouldn't force the soft keyboard back open.
-    if (!(opts.fromClick && !hasFinePointer)) input.focus();
+    // Tapping a chip on a phone shouldn't force the soft keyboard back open,
+    // and the palette owns focus while it is open.
+    if (!palette.isOpen() && !(opts.fromClick && !hasFinePointer)) input.focus();
   }
+
+  // ── Command palette ──────────────────────────────────────────────────
+  const palette = createPalette({
+    entries: (): PaletteEntry[] => [
+      ...paletteEntries(),
+      {
+        command: 'theme next',
+        label: 'theme next',
+        desc: 'Cycle to the next palette',
+        kind: 'action',
+      },
+      {
+        command: 'matrix on',
+        label: 'matrix on',
+        desc: 'Start the rain',
+        kind: 'action',
+      },
+      {
+        command: 'matrix off',
+        label: 'matrix off',
+        desc: 'Stop the rain',
+        kind: 'action',
+      },
+      ...Object.entries(files).map(([name, file]) => ({
+        command: `cat ${name}`,
+        label: name,
+        desc: `${file.desc}${file.available ? '' : ' — sealed'}`,
+        kind: 'archive' as const,
+      })),
+    ],
+    onRun: (cmd) => {
+      void runCommand(cmd);
+    },
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && ['k', 'p'].includes(e.key.toLowerCase())) {
+      e.preventDefault();
+      if (palette.isOpen()) palette.close();
+      else palette.open();
+    }
+  });
 
   // Click-to-run: any element carrying data-command behaves like a menu item.
   // (Header "Directory", sidebar entry, welcome-banner chips.)
@@ -458,6 +566,16 @@ export function initTerminal(init: TerminalInit): void {
     }
   }
 
+  let lastSurge = 0;
+  const pulseRain = () => {
+    if (!matrix.isActive()) return;
+    const now = performance.now();
+    if (now - lastSurge < 110) return;
+    lastSurge = now;
+    matrix.surge();
+    if (Math.random() < 0.14) audio.play('surge');
+  };
+
   input.addEventListener('keydown', (e) => {
     // While the BIOS overlay is up, keystrokes belong to it (Escape/Enter skip)
     // — otherwise they typed invisibly into the hidden input and played SFX.
@@ -467,7 +585,6 @@ export function initTerminal(init: TerminalInit): void {
     }
 
     audio.init();
-    if (e.key !== 'Tab') tabState = null;
 
     // Ctrl+L → clear; Ctrl+C → cancel typewriter and any running command
     if (e.ctrlKey && e.key.toLowerCase() === 'l') {
@@ -520,7 +637,8 @@ export function initTerminal(init: TerminalInit): void {
     if (activeTypewriter) {
       activeTypewriter.skip();
     }
-    audio.play('type');
+    audio.play('key');
+    pulseRain();
   });
 
   form.addEventListener('submit', (e) => {
@@ -529,6 +647,9 @@ export function initTerminal(init: TerminalInit): void {
     input.value = '';
     void runCommand(val);
   });
+
+  // Keep the palette's archive list honest if anything re-renders files.
+  palette.refresh();
 
   // ── Session banner timestamps ────────────────────────────────────────
   // The page is static, so the build-time stamp used to claim every visitor
@@ -545,7 +666,9 @@ export function initTerminal(init: TerminalInit): void {
   } catch {
     /* ignore */
   }
-  const stamp = previousVisit ?? (buildTime && !Number.isNaN(buildTime.getTime()) ? buildTime : new Date());
+  const stamp =
+    previousVisit ??
+    (buildTime && !Number.isNaN(buildTime.getTime()) ? buildTime : new Date());
   ctx.setLastLogin(formatUtc(stamp));
 }
 

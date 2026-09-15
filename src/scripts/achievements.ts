@@ -22,6 +22,9 @@ export const ACHIEVEMENTS: Record<string, Achievement> = {
   reboot_loop: { id: 'reboot_loop', name: 'Reboot Loop', hint: 'Replay the boot sequence.' },
   oops: { id: 'oops', name: 'Permission Denied', hint: 'Try sudo.' },
   archivist: { id: 'archivist', name: 'Archivist', hint: 'Open an archive with cat.' },
+  the_one: { id: 'the_one', name: 'The One', hint: "Type 'neo'." },
+  redpill: { id: 'redpill', name: 'Red Pill', hint: 'Take the red pill.' },
+  bluepill: { id: 'bluepill', name: 'Blue Pill', hint: 'Take the blue pill.' },
 };
 
 type State = {

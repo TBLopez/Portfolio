@@ -17,46 +17,15 @@ export type SystemFile = {
 };
 
 /**
- * Archives that ship with the terminal itself.
+ * Archives that ship with the terminal itself — no CMS required.
  *
- * These are the operator's own documents. They are listed as SEALED rather
- * than hidden because "request access" reads better than an empty directory,
- * and because `ls` with zero results was previously indistinguishable from a
- * broken command.
- *
- * (The PDFs themselves are not published — hence `available: false`.)
+ * Deliberately only real, reachable targets. The earlier build listed five
+ * personal PDFs as [SEALED] to avoid an empty directory; with Notion
+ * credentials absent that made the whole listing read as filler, so the
+ * placeholders are gone. Set NOTION_API_KEY + NOTION_DATA_SOURCE_ID (see
+ * .env.example) and the directory fills with project entries instead.
  */
 export const localFiles: Record<string, SystemFile> = {
-  'capstone.pdf': {
-    desc: 'IT Capstone Report',
-    url: '',
-    available: false,
-    tag: 'ACADEMIC',
-  },
-  'executive_pres.pdf': {
-    desc: 'Executive Security Overview',
-    url: '',
-    available: false,
-    tag: 'ACADEMIC',
-  },
-  'apt28.pdf': {
-    desc: 'Threat Actor Profile — APT28 (Fancy Bear)',
-    url: '',
-    available: false,
-    tag: 'THREAT INTEL',
-  },
-  'apt41.pdf': {
-    desc: 'Case Study — APT41 (Double Dragon)',
-    url: '',
-    available: false,
-    tag: 'THREAT INTEL',
-  },
-  'resume.pdf': {
-    desc: 'Operator CV — full history & certifications',
-    url: '',
-    available: false,
-    tag: 'PERSONNEL',
-  },
   'firefly_src.url': {
     desc: 'This terminal — Astro + Tailwind source on GitHub',
     url: 'https://github.com/TBLopez/Portfolio',
@@ -70,5 +39,12 @@ export const localFiles: Record<string, SystemFile> = {
     available: true,
     embed: false,
     tag: 'CODE',
+  },
+  'linkedin.url': {
+    desc: 'Professional profile & work history',
+    url: 'https://www.linkedin.com/in/techtony/',
+    available: true,
+    embed: false,
+    tag: 'CONTACT',
   },
 };
