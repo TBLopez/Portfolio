@@ -2,29 +2,73 @@
 import Layout from '../layouts/Layout.astro';
 ---
 
-<Layout title="404 — Terminal Not Found // Tony Khawaja-Lopez">
-  <div class="flex flex-col items-center justify-center min-h-[60vh] gap-6 p-8">
-    <div class="text-primary-container font-bold text-5xl md:text-7xl tracking-widest">
+<Layout
+  title="404 — Route Not Found // Tony Khawaja-Lopez"
+  description="Nothing is mounted at this path. Return to the Firefly terminal."
+  skipTarget="#main"
+  noindex
+>
+  <!--
+    The 404 is deliberately chrome-free: TerminalHeader/Footer carry controls
+    that only work when the terminal bundle is running, and this page has no
+    terminal. A static brand bar avoids shipping dead buttons.
+  -->
+  <header
+    class="bg-surface/80 backdrop-blur-md text-primary-container border-b border-outline-variant/30 flex items-center w-full px-3 md:px-4 h-12 md:h-10 sticky top-0 z-40 shrink-0"
+  >
+    <div class="font-bold flex items-center gap-2 truncate font-ui">
+      <span aria-hidden="true" class="glow-text">&gt;_</span>
+      <span class="truncate tracking-wide">TONY@FIREFLY:~ /404</span>
+    </div>
+  </header>
+
+  <main
+    id="main"
+    class="flex-1 flex flex-col items-center justify-center gap-6 p-6 md:p-10 relative z-30"
+  >
+    <div
+      class="text-primary-container font-bold text-6xl md:text-8xl tracking-widest glow-text-strong"
+      aria-hidden="true"
+    >
       404
     </div>
-    <div class="text-on-surface/70 font-mono text-sm md:text-base">
+
+    <h1 class="sr-only">404 — route not found</h1>
+
+    <div class="text-on-surface/80 font-mono text-sm md:text-base tracking-wider">
       ERROR: ROUTE_NOT_FOUND
     </div>
-    <pre class="text-error text-xs md:text-sm leading-relaxed text-center max-w-md" aria-hidden="true">
-  ┌──────────────────────────────┐
-  │  The requested path does not │
-  │  exist in the current        │
-  │  filesystem.                 │
-  │                              │
-  │  Try:                        │
-  │  • <a href="/" class="underline hover:text-white">cd /</a> to return to root  │
-  └──────────────────────────────┘
-    </pre>
-    <a
-      href="/"
-      class="mt-4 inline-block border border-primary-container text-primary-container px-6 py-2 font-mono text-sm uppercase tracking-widest hover:bg-primary-container hover:text-black transition-colors"
+
+    <div
+      class="w-full max-w-md border border-error/60 bg-surface/50 px-5 py-4 font-mono text-xs md:text-sm text-on-surface/90 leading-relaxed"
     >
-      Return to Terminal
-    </a>
-  </div>
+      <p>The requested path does not exist in the current filesystem.</p>
+      <p class="mt-3 opacity-80">
+        Try: <code class="text-primary-container">cd /</code> to return to root.
+      </p>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-center gap-3">
+      <a
+        href="/"
+        class="inline-block border border-primary-container text-primary-container px-6 py-2 font-mono text-sm uppercase tracking-widest hover:bg-primary-container hover:text-black transition-colors"
+      >
+        Return to Terminal
+      </a>
+      <a
+        href="https://github.com/TBLopez"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-block border border-outline text-on-surface/80 px-6 py-2 font-mono text-sm uppercase tracking-widest hover:border-primary-container hover:text-primary-container transition-colors"
+      >
+        GitHub
+      </a>
+    </div>
+  </main>
+
+  <footer
+    class="border-t border-outline-variant/30 px-4 py-3 text-center font-mono text-[10px] uppercase tracking-widest text-on-surface/60 shrink-0"
+  >
+    firefly terminal // exit code 404
+  </footer>
 </Layout>

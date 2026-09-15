@@ -4,12 +4,41 @@ import '../styles/global.css';
 interface Props {
   title?: string;
   description?: string;
+  /** Skip-link target: the homepage links to the prompt, sub-pages to <main>. */
+  skipTarget?: string;
+  noindex?: boolean;
 }
 
 const {
   title = 'Tony Khawaja-Lopez — Security Analyst // Terminal Portfolio',
   description = 'Interactive terminal portfolio for Tony Khawaja-Lopez, a security analyst specializing in penetration testing and tactical development.',
+  skipTarget = '#cmd-input',
+  noindex = false,
 } = Astro.props;
+
+const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://tonykl.com').href;
+const ogImage = new URL('/og.png', Astro.site ?? 'https://tonykl.com').href;
+
+const personSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Person',
+  name: 'Tony Khawaja-Lopez',
+  alternateName: 'Tony Lopez',
+  url: 'https://tonykl.com/',
+  jobTitle: 'Security Analyst',
+  description:
+    'Security analyst specializing in penetration testing, threat analysis, and tactical development.',
+  knowsAbout: [
+    'Penetration Testing',
+    'Threat Intelligence',
+    'Incident Response',
+    'Security Operations',
+  ],
+  sameAs: [
+    'https://github.com/TBLopez',
+    'https://www.linkedin.com/in/techtony/',
+  ],
+};
 ---
 
 <!doctype html>
@@ -20,15 +49,41 @@ const {
     <meta name="description" content={description} />
     <meta name="theme-color" content="#000000" />
     <meta name="color-scheme" content="dark" />
+    <meta name="author" content="Tony Khawaja-Lopez" />
+    {noindex && <meta name="robots" content="noindex" />}
+    <link rel="canonical" href={canonical} />
+
+    <!-- Icons -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="alternate icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Social previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="tonykl.com" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="TONY LOPEZ — Firefly terminal portfolio" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
     <title>{title}</title>
     <meta name="generator" content={Astro.generator} />
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(personSchema)} />
   </head>
   <body
     class="bg-black text-primary-container font-body selection:bg-primary-container selection:text-black min-h-dvh flex flex-col m-0 p-0"
   >
-    <a href="#cmd-input" class="skip-link">Skip to terminal input</a>
+    <a href={skipTarget} class="skip-link">Skip to terminal input</a>
     <div id="bg-grid" aria-hidden="true"></div>
     <canvas id="matrix-rain" aria-hidden="true"></canvas>
     <div class="scanline fixed inset-0 z-50 pointer-events-none" aria-hidden="true"></div>
@@ -40,6 +95,11 @@ const {
       aria-label="Achievement notifications"
     >
     </div>
-    <div id="boot-overlay" role="presentation" aria-hidden="true"></div>
+    <div
+      id="boot-overlay"
+      role="region"
+      aria-label="System boot sequence"
+      aria-hidden="true"
+    ></div>
   </body>
 </html>
