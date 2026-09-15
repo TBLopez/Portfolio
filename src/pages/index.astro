@@ -60,6 +60,18 @@ if (notionConnected) {
 // without a CMS. Unauthenticated: 60 req/hour per IP is plenty for a build,
 // and private repos simply never appear.
 const GITHUB_USER = 'TBLopez';
+/** Only the fields the directory listing reads. */
+interface Repo {
+  id: number;
+  name: string;
+  description: string | null;
+  homepage: string | null;
+  html_url: string;
+  language: string | null;
+  fork: boolean;
+  archived: boolean;
+  pushed_at: string | null;
+}
 // Anonymous requests are capped at 60/hour per IP, which a few rebuilds can
 // burn through. Set GITHUB_TOKEN to lift that to 5,000/hour; the token is only
 // ever used as a request header and never reaches the page.
@@ -85,9 +97,9 @@ try {
     );
   }
   if (response.ok) {
-    const repos = (await response.json()) as any[];
+    const repos = (await response.json()) as Repo[];
     repoProjects = repos
-      .filter((repo) => repo && !repo.fork && !repo.archived && repo.name)
+      .filter((repo) => !repo.fork && !repo.archived && repo.name)
       .map((repo) => {
         // Prefer a live homepage, unless it is this site (avoids framing
         // ourselves) — then link to the source.

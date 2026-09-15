@@ -12,13 +12,7 @@ import {
   resolveA,
   type DohResult,
 } from '../scripts/net';
-import {
-  ACHIEVEMENTS,
-  getAll,
-  getUnlocked,
-  isUnlocked,
-  unlock,
-} from '../scripts/achievements';
+import { getAll, getUnlocked, isUnlocked, unlock } from '../scripts/achievements';
 
 export type CommandContext = {
   files: Record<string, SystemFile>;
@@ -1355,7 +1349,6 @@ export const commands: Record<string, Command> = {
         }),
       ),
     );
-    void ACHIEVEMENTS; // referenced for potential future use
     return { node: wrapper, typewrite: false };
   },
 };
@@ -1364,9 +1357,6 @@ export const commands: Record<string, Command> = {
 // commandNames one longer than the real command count — which made the
 // "Completionist" badge mathematically unreachable.
 export const commandNames = Object.keys(commands);
-
-/** Documented commands, for the help grid and the Ctrl+K palette. */
-export const commandHelp = helpRows;
 
 /** Easter eggs stay out of the palette — finding them is the point. */
 const SECRET_COMMANDS = new Set(['sudo', 'neo', 'redpill', 'bluepill', 'dejavu']);

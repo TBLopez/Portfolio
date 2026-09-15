@@ -24,7 +24,6 @@ export default {
         error: cssVar('--c-error'),
       },
       fontFamily: {
-        headline: ['Inter', 'system-ui', 'sans-serif'],
         body: ['var(--font-mono)'],
         label: ['var(--font-mono)'],
         mono: ['var(--font-mono)'],

@@ -70,10 +70,6 @@ export function dnsTypeName(code: number): string {
   return TYPE_NAMES[code] ?? `TYPE${code}`;
 }
 
-export function dnsTypeCode(name: string): number | undefined {
-  return DNS_TYPES[name.toUpperCase()];
-}
-
 export function dnsStatusName(code: number): string {
   return DNS_STATUS[code] ?? `RCODE${code}`;
 }

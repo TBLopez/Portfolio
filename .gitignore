@@ -22,6 +22,6 @@ pnpm-debug.log*
 # jetbrains setting folder
 .idea/
 
-# legacy Gatsby/Parcel caches (pre-Astro leftovers, still tracked upstream)
+# Gatsby-era caches (pre-Astro leftovers)
 .cache/
 .vscode/
